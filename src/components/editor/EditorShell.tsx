@@ -23,6 +23,11 @@ interface Props {
   dispatch: Dispatch<EditorAction>;
 }
 
+/** Desktop layout breakpoint (Tailwind lg). */
+function isDesktop(): boolean {
+  return typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches;
+}
+
 function IconButton(props: { label: string; onClick(): void; disabled?: boolean; active?: boolean; children: React.ReactNode }) {
   return (
     <button
@@ -50,10 +55,14 @@ export function EditorShell({ state, dispatch }: Props) {
   const [zoom, setZoom] = useState(1);
   const [preview, setPreview] = useState(false);
   const [freshText, setFreshText] = useState<string | null>(null);
+  // Phones: the panel is a bottom sheet that opens on a tool tap or a selection.
+  const [sheet, setSheet] = useState(false);
+  const sheetOpen = sheet || Boolean(state.selected);
   const pageIndex = PAGES.indexOf(page);
 
   const goInside = () => setPage("inside");
   const pickTool = (t: Tool) => {
+    setSheet(tool === t ? !sheetOpen : true);
     setTool(t);
     dispatch({ type: "select", uid: null });
     if (t !== "style" && t !== "paper") goInside();
@@ -78,11 +87,14 @@ export function EditorShell({ state, dispatch }: Props) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         {!preview && (
-          <nav aria-label="编辑工具" className="flex w-16 shrink-0 flex-col items-center gap-1 border-r border-stone-200/70 py-3">
+          <nav
+            aria-label="编辑工具"
+            className="order-3 flex w-full shrink-0 flex-row justify-around gap-1 border-t border-stone-200/70 px-2 py-1.5 lg:order-none lg:w-16 lg:flex-col lg:justify-start lg:border-r lg:border-t-0 lg:px-0 lg:py-3"
+          >
             {TOOLS.map(({ id, icon: Icon }) => {
-              const active = tool === id && !state.selected;
+              const active = tool === id && !state.selected && (sheetOpen || isDesktop());
               return (
                 <button
                   key={id}
@@ -99,7 +111,7 @@ export function EditorShell({ state, dispatch }: Props) {
           </nav>
         )}
 
-        <div className="relative flex min-w-0 flex-1 flex-col">
+        <div className="relative order-1 flex min-h-0 min-w-0 flex-1 flex-col lg:order-none">
           <div className="relative min-h-0 flex-1">
             <CardEditor state={state} dispatch={dispatch} paper={state.draft.paper} page={page} zoom={zoom} preview={preview} onPage={setPage} card={card} />
           </div>
@@ -115,7 +127,10 @@ export function EditorShell({ state, dispatch }: Props) {
         </div>
 
         {!preview && (
-          <aside aria-label="上下文面板" className="flex w-72 shrink-0 flex-col border-l border-stone-200/70 bg-white/70">
+          <aside
+            aria-label="上下文面板"
+            className={`order-2 max-h-[40vh] w-full shrink-0 flex-col border-t border-stone-200/70 bg-white/95 lg:order-none lg:flex lg:max-h-none lg:w-72 lg:border-l lg:border-t-0 lg:bg-white/70 ${sheetOpen ? "flex" : "hidden"}`}
+          >
             <ContextPanel
               tool={tool}
               state={state}
@@ -131,7 +146,7 @@ export function EditorShell({ state, dispatch }: Props) {
 
       <footer className="flex shrink-0 items-center gap-1 border-t border-stone-200/70 px-3 py-1.5">
         {!preview && (
-          <>
+          <div className="hidden items-center gap-1 lg:flex">
             <IconButton label="缩小" disabled={zoom <= ZOOM_MIN} onClick={() => setZoom(stepZoom(zoom, -1))}>
               <ZoomOut className="h-4 w-4" />
             </IconButton>
@@ -139,7 +154,7 @@ export function EditorShell({ state, dispatch }: Props) {
             <IconButton label="放大" disabled={zoom >= ZOOM_MAX} onClick={() => setZoom(stepZoom(zoom, 1))}>
               <ZoomIn className="h-4 w-4" />
             </IconButton>
-          </>
+          </div>
         )}
         <span className="ml-auto" />
         {!preview && (

@@ -26,6 +26,11 @@ interface Props {
  */
 const EDITOR_FIT = 1.3;
 
+/** Only on desktop: a phone's open card is already width-limited. */
+function editorFit(): number {
+  return typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches ? EDITOR_FIT : 1;
+}
+
 type Gesture =
   | { kind: "drag"; uid: string; face: Face; start: CardPick; from: { x: number; y: number }; recorded: boolean }
   | {
@@ -166,7 +171,7 @@ export function CardEditor({ state, dispatch, paper, page, zoom, preview, onPage
         isPaused={false}
         elements={state.draft.elements}
         paper={paper}
-        zoom={zoom * EDITOR_FIT}
+        zoom={zoom * editorFit()}
         interactive={false}
         handleRef={card}
       />
