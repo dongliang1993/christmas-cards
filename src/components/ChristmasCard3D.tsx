@@ -8,7 +8,8 @@ import { CARD_ASSETS } from "@/lib/cardAssets";
 import { CARD_H, CARD_THICKNESS, CARD_W, SHEET_H, SHEET_THICKNESS, SHEET_W } from "@/lib/cardConstants";
 import { createElementLayer, type ElementLayer, type LayerElement } from "@/lib/card/elementMeshes";
 import { localToPlacement } from "@/lib/card/elementLayout";
-import type { Face } from "@/lib/letter/model";
+import { applyPaperStock, paperTintOf } from "@/lib/card/paperStocks";
+import type { Face, PaperStock } from "@/lib/letter/model";
 import {
   applyBow,
   BOW_AMP,
@@ -60,6 +61,8 @@ interface ChristmasCard3DProps {
    * drives it); the pointer lamp still follows the pointer.
    */
   interactive?: boolean;
+  /** Card stock for the inside pages and edges; omitted keeps the template's paper. */
+  paper?: PaperStock;
   /** Editor access to picking and on-screen element corners. */
   handleRef?: Ref<CardHandle>;
 }
@@ -233,6 +236,7 @@ export function ChristmasCard3D({
   onReady,
   elements,
   interactive = true,
+  paper,
   handleRef,
 }: ChristmasCard3DProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -265,6 +269,7 @@ export function ChristmasCard3D({
   const interactiveRef = useRef(interactive);
   interactiveRef.current = interactive;
   const pickApiRef = useRef<CardHandle | null>(null);
+  const paperMatsRef = useRef<THREE.MeshPhysicalMaterial[]>([]);
   useImperativeHandle(handleRef, () => ({
     pick: (cx, cy) => pickApiRef.current?.pick(cx, cy) ?? null,
     project: (uid) => pickApiRef.current?.project(uid) ?? null,
@@ -401,7 +406,7 @@ export function ChristmasCard3D({
     const cardCenterGroup = new THREE.Group();
     outerGroup.add(cardCenterGroup);
 
-    const paperEdgeMat = new THREE.MeshStandardMaterial({
+    const paperEdgeMat = new THREE.MeshPhysicalMaterial({
       color: 0xe6ddd1,
       roughness: 0.9,
       metalness: 0.0,
@@ -419,7 +424,7 @@ export function ChristmasCard3D({
     coverBaseMat.metalness = 0.55;
     coverBaseMat.roughness = 0.6;
 
-    const insideLeftMat = new THREE.MeshStandardMaterial({
+    const insideLeftMat = new THREE.MeshPhysicalMaterial({
       roughness: 0.86,
       metalness: 0.01,
       normalMap: paperNormalTex,
@@ -428,14 +433,14 @@ export function ChristmasCard3D({
     // #3 Inside shade base color; animated by open angle in the render loop.
     insideLeftMat.color = new THREE.Color(0xffffff);
 
-    const insideRightBaseMat = new THREE.MeshStandardMaterial({
+    const insideRightBaseMat = new THREE.MeshPhysicalMaterial({
       roughness: 0.86,
       metalness: 0.01,
       normalMap: paperNormalTex,
       normalScale: new THREE.Vector2(0.9, 0.9),
     });
 
-    const insideRightSheetMat = new THREE.MeshStandardMaterial({
+    const insideRightSheetMat = new THREE.MeshPhysicalMaterial({
       roughness: 0.82,
       metalness: 0.01,
       normalMap: paperNormalTex,
@@ -589,6 +594,8 @@ export function ChristmasCard3D({
     });
     const cardSnow = new THREE.Points(cardSnowGeo, cardSnowMat);
     frontPivot.add(cardSnow);
+
+    paperMatsRef.current = [paperEdgeMat, insideLeftMat, insideRightBaseMat, insideRightSheetMat];
 
     elementLayerRef.current = createElementLayer(
       {
@@ -959,10 +966,10 @@ export function ChristmasCard3D({
       if (handles) {
         // #3 Inside shade: cover shades the inside as it swings.
         const shade = 1 - 0.45 * Math.sin(Math.min(Math.PI, openAngle / OPEN_MAX) * Math.PI);
-        handles.insideLeftMat.color.setScalar(shade);
-        handles.insideRightBaseMat.color.setScalar(
-          1 - 0.28 * (1 - shade),
-        );
+        handles.insideLeftMat.color.copy(paperTintOf(handles.insideLeftMat)).multiplyScalar(shade);
+        handles.insideRightBaseMat.color
+          .copy(paperTintOf(handles.insideRightBaseMat))
+          .multiplyScalar(1 - 0.28 * (1 - shade));
 
         // #2 Key light follows pointer a little (studio softbox nudge).
         keyTarget.position.x = THREE.MathUtils.lerp(
@@ -1374,6 +1381,10 @@ export function ChristmasCard3D({
   useEffect(() => {
     elementLayerRef.current?.sync(elements ?? []);
   }, [elements]);
+
+  useEffect(() => {
+    if (paper) applyPaperStock(paperMatsRef.current, paper);
+  }, [paper]);
 
   return (
     <div

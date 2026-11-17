@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ChristmasCard3D } from "@/components/ChristmasCard3D";
 import type { LayerElement } from "@/lib/card/elementMeshes";
+import { PAPER_STOCK_IDS, type PaperStock } from "@/lib/letter/model";
 
 const ELEMENTS: LayerElement[] = [
   { uid: "star", kind: "sticker", stickerId: "star-gold", face: "inside-left", x: 0.3, y: 0.25, scale: 1, rotation: -0.2, z: 0 },
@@ -15,6 +16,7 @@ const ELEMENTS: LayerElement[] = [
 
 export function ElementsPreview() {
   const [open, setOpen] = useState(true);
+  const [paper, setPaper] = useState<PaperStock>("cold-press");
   const elements = useMemo(() => ELEMENTS, []);
   return (
     <main className="relative h-dvh w-screen overflow-hidden bg-[#fbfaf9]">
@@ -25,8 +27,16 @@ export function ElementsPreview() {
         isOpen={open}
         isPaused={false}
         elements={elements}
+        paper={paper}
         onToggleOpen={() => setOpen((v) => !v)}
       />
+      <div className="absolute left-4 top-4 flex gap-2">
+        {PAPER_STOCK_IDS.map((id) => (
+          <button key={id} type="button" onClick={() => setPaper(id)} className="rounded-lg bg-white px-3 py-1.5 text-xs shadow">
+            {id}
+          </button>
+        ))}
+      </div>
     </main>
   );
 }
