@@ -19,3 +19,7 @@ public/uploads/
 
 # Ryugi scratch (workspaces are recreated per spec)
 .ryugi/sdd/
+
+# Cloudflare build output
+.open-next/
+.wrangler/

@@ -1,6 +1,7 @@
 import path from "node:path";
 import { mkdirSync } from "node:fs";
 import { createLetterRepository, LETTERS_SCHEMA_SQL, type LetterRepository } from "@/lib/letter/repository";
+import { cloudflareBindings } from "./cloudflare";
 
 let override: LetterRepository | null = null;
 let local: Promise<LetterRepository> | null = null;
@@ -20,11 +21,13 @@ async function openLocal(): Promise<LetterRepository> {
 }
 
 /**
- * The letter store for this request. Local development uses a SQLite file
- * under data/; the Cloudflare build switches to the D1 binding (Task 13).
+ * The letter store for this request: the D1 binding on Cloudflare, a
+ * SQLite file under data/ in local development.
  */
 export async function getLetterRepository(): Promise<LetterRepository> {
   if (override) return override;
+  const env = await cloudflareBindings();
+  if (env?.DB) return createLetterRepository(env.DB);
   local ??= openLocal();
   return local;
 }
