@@ -14,16 +14,6 @@ export interface CardTemplate {
   defaultMessage: string;
 }
 
-export interface ChristmasCardRecord {
-  id: string;
-  templateId: CardTemplateId;
-  message: string;
-  signature: string;
-  audioUrl: string | null;
-  audioName: string | null;
-  createdAt: string;
-}
-
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;
