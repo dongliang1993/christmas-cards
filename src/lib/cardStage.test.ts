@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
-import { fitStage, shadowFootprint, studioBackgroundColor, STUDIO_BG_HEX } from "./cardStage";
+import { fitStage, shadowFootprint, studioBackgroundColor, STUDIO_BG_HEX, zoomedDistance } from "./cardStage";
 
 describe("fitStage", () => {
   it("frames the closed card at 62% of the view height on a landscape screen", () => {
@@ -64,5 +64,16 @@ describe("shadowFootprint", () => {
     // Cover standing straight up casts nothing to the left of the spine.
     const f = shadowFootprint(Math.PI / 2, W);
     expect(f.left).toBeCloseTo(0);
+  });
+});
+
+describe("zoomedDistance", () => {
+  it("brings the camera closer as zoom grows", () => {
+    expect(zoomedDistance(10, 2)).toBeCloseTo(5);
+  });
+
+  it("clamps zoom to the editor's range", () => {
+    expect(zoomedDistance(10, 9)).toBeCloseTo(5);
+    expect(zoomedDistance(10, 0.01)).toBeCloseTo(10 / 0.6);
   });
 });

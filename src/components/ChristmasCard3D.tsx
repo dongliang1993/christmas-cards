@@ -7,7 +7,7 @@ import { RectAreaLightUniformsLib } from "three/examples/jsm/lights/RectAreaLigh
 import { CARD_ASSETS } from "@/lib/cardAssets";
 import { CARD_H, CARD_THICKNESS, CARD_W, SHEET_H, SHEET_THICKNESS, SHEET_W } from "@/lib/cardConstants";
 import { createElementLayer, type ElementLayer, type LayerElement } from "@/lib/card/elementMeshes";
-import { localToPlacement } from "@/lib/card/elementLayout";
+import { localToPlacement, placementToLocal } from "@/lib/card/elementLayout";
 import { applyPaperStock, paperTintOf } from "@/lib/card/paperStocks";
 import type { Face, PaperStock } from "@/lib/letter/model";
 import {
@@ -27,7 +27,7 @@ import {
 } from "@/lib/cardInteract";
 import { createPostfxStack, type PostfxStack } from "@/lib/cardPostfx";
 import { buildPaperNormalTile, buildSurface, type CoverSurface } from "@/lib/cardRelief";
-import { fitStage, shadowFootprint, studioBackgroundColor, type StageFit } from "@/lib/cardStage";
+import { fitStage, shadowFootprint, studioBackgroundColor, zoomedDistance, type StageFit } from "@/lib/cardStage";
 import {
   createBackCanvas,
   createBlankSheetCanvas,
@@ -61,6 +61,8 @@ interface ChristmasCard3DProps {
    * drives it); the pointer lamp still follows the pointer.
    */
   interactive?: boolean;
+  /** Editor zoom, 0.6–2 (camera moves closer); 1 is the fitted view. */
+  zoom?: number;
   /** Card stock for the inside pages and edges; omitted keeps the template's paper. */
   paper?: PaperStock;
   /** Editor access to picking and on-screen element corners. */
@@ -82,6 +84,8 @@ export interface CardHandle {
   pick(clientX: number, clientY: number): CardPick | null;
   /** An element's corners (tl, tr, br, bl) in px relative to the card's container. */
   project(uid: string): { x: number; y: number }[] | null;
+  /** A whole inside page's corners (tl, tr, br, bl), same frame as `project`. */
+  projectFace(face: Face): { x: number; y: number }[] | null;
 }
 
 interface RuntimeLiftedMesh {
@@ -237,6 +241,7 @@ export function ChristmasCard3D({
   elements,
   interactive = true,
   paper,
+  zoom = 1,
   handleRef,
 }: ChristmasCard3DProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -268,11 +273,14 @@ export function ChristmasCard3D({
   const bareRef = useRef(elements !== undefined);
   const interactiveRef = useRef(interactive);
   interactiveRef.current = interactive;
+  const viewRef = useRef({ zoom });
+  viewRef.current = { zoom };
   const pickApiRef = useRef<CardHandle | null>(null);
   const paperMatsRef = useRef<THREE.MeshPhysicalMaterial[]>([]);
   useImperativeHandle(handleRef, () => ({
     pick: (cx, cy) => pickApiRef.current?.pick(cx, cy) ?? null,
     project: (uid) => pickApiRef.current?.project(uid) ?? null,
+    projectFace: (face) => pickApiRef.current?.projectFace(face) ?? null,
   }), []);
   callbacksRef.current = { onToggleOpen, onOpenProgress, onReady };
 
@@ -726,6 +734,20 @@ export function ChristmasCard3D({
         }
         return null;
       },
+      projectFace(face) {
+        const panel = face === "inside-left" ? coverMesh : sheetMesh;
+        const rect = container.getBoundingClientRect();
+        return [
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 1],
+        ].map(([u, v]) => {
+          const p = placementToLocal(face, u, v);
+          const w = panel.localToWorld(new THREE.Vector3(p.x, p.y, p.z)).project(camera);
+          return { x: ((w.x + 1) / 2) * rect.width, y: ((1 - w.y) / 2) * rect.height };
+        });
+      },
       project(uid) {
         const mesh = elementLayerRef.current?.meshes().find((m) => m.userData.uid === uid);
         if (!mesh) return null;
@@ -1087,8 +1109,10 @@ export function ChristmasCard3D({
         1 - Math.exp(-dt * 8),
       );
 
-      const targetCamZ =
-        stage.closedZ + (stage.openZ - stage.closedZ) * s.openProgress;
+      const targetCamZ = zoomedDistance(
+        stage.closedZ + (stage.openZ - stage.closedZ) * s.openProgress,
+        viewRef.current.zoom,
+      );
       camera.position.z = THREE.MathUtils.lerp(
         camera.position.z,
         targetCamZ,

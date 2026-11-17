@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChristmasCard3D } from "@/components/ChristmasCard3D";
 import type { LayerElement } from "@/lib/card/elementMeshes";
 import { PAPER_STOCK_IDS, type PaperStock } from "@/lib/letter/model";
@@ -17,6 +17,12 @@ const ELEMENTS: LayerElement[] = [
 export function ElementsPreview() {
   const [open, setOpen] = useState(true);
   const [paper, setPaper] = useState<PaperStock>("cold-press");
+  const [view, setView] = useState<{ zoom: number; hl: "inside-left" | "inside-right" | null }>({ zoom: 1, hl: null });
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const hl = q.get("hl");
+    setView({ zoom: Number(q.get("zoom") ?? 1), hl: hl === "inside-left" || hl === "inside-right" ? hl : null });
+  }, []);
   const elements = useMemo(() => ELEMENTS, []);
   return (
     <main className="relative h-dvh w-screen overflow-hidden bg-[#fbfaf9]">
@@ -28,6 +34,7 @@ export function ElementsPreview() {
         isPaused={false}
         elements={elements}
         paper={paper}
+        zoom={view.zoom}
         onToggleOpen={() => setOpen((v) => !v)}
       />
       <div className="absolute left-4 top-4 flex gap-2">

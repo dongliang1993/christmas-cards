@@ -98,3 +98,8 @@ export function fitStage(
 export function shadowFootprint(openAngle: number, cardW: number): { left: number; right: number } {
   return { left: Math.min(0, cardW * Math.cos(openAngle)), right: cardW };
 }
+
+/** Camera distance for an editor zoom level (spec §13.5: 60%–200%). */
+export function zoomedDistance(distance: number, zoom: number): number {
+  return distance / Math.min(2, Math.max(0.6, zoom));
+}
