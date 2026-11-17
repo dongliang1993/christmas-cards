@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+:root {
+  --bg-canvas: #fbfaf9;
+  --text-primary: #1a1816;
+  --text-muted: #7a736b;
+  --dock-bg: rgba(255, 255, 255, 0.88);
+  --dock-border: rgba(26, 24, 22, 0.08);
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+@keyframes snow-fall {
+  0% {
+    transform: translateY(-10vh) translateX(0);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.7;
+  }
+  85% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: translateY(105vh) translateX(20px);
+    opacity: 0;
+  }
+}
+
+.snowflake {
+  animation: snow-fall linear infinite;
+}

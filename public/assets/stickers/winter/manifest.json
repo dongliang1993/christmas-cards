@@ -1,0 +1,29 @@
+{
+  "set": "winter",
+  "stickers": [
+    {
+      "id": "star-gold",
+      "label": "金色星星",
+      "material": "foil",
+      "src": "/assets/stickers/winter/star-gold.png"
+    },
+    {
+      "id": "sparkles",
+      "label": "闪光",
+      "material": "foil",
+      "src": "/assets/stickers/winter/sparkles.png"
+    },
+    {
+      "id": "pine-tree",
+      "label": "小松树",
+      "material": "paint",
+      "src": "/assets/stickers/winter/pine-tree.png"
+    },
+    {
+      "id": "gingerbread",
+      "label": "姜饼人",
+      "material": "paint",
+      "src": "/assets/stickers/winter/gingerbread.png"
+    }
+  ]
+}

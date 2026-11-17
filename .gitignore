@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Next.js
+.next/
+out/
+
+# Local data & uploads
+data/
+public/uploads/
+
+# Misc
+.DS_Store
+*.log
+
+# TypeScript
+*.tsbuildinfo
+
+# Ryugi scratch (workspaces are recreated per spec)
+.ryugi/sdd/
