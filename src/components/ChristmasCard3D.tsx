@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useImperativeHandle, useRef, type Ref } from "react";
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { RectAreaLightUniformsLib } from "three/examples/jsm/lights/RectAreaLightUniformsLib.js";
 import { CARD_ASSETS } from "@/lib/cardAssets";
 import { CARD_H, CARD_THICKNESS, CARD_W, SHEET_H, SHEET_THICKNESS, SHEET_W } from "@/lib/cardConstants";
 import { createElementLayer, type ElementLayer, type LayerElement } from "@/lib/card/elementMeshes";
+import { localToPlacement } from "@/lib/card/elementLayout";
+import type { Face } from "@/lib/letter/model";
 import {
   applyBow,
   BOW_AMP,
@@ -53,6 +55,30 @@ interface ChristmasCard3DProps {
    * template's motifs and `message`.
    */
   elements?: LayerElement[];
+  /**
+   * false: the card ignores its own drag-open / tap gestures (the editor
+   * drives it); the pointer lamp still follows the pointer.
+   */
+  interactive?: boolean;
+  /** Editor access to picking and on-screen element corners. */
+  handleRef?: Ref<CardHandle>;
+}
+
+/** What lies under a screen point on the open card. */
+export interface CardPick {
+  face: Face;
+  /** 0..1 placement on that face. */
+  x: number;
+  y: number;
+  /** uid of the element under the point, if any. */
+  uid: string | null;
+}
+
+export interface CardHandle {
+  /** clientX/clientY → face position and element, or null off the inside pages. */
+  pick(clientX: number, clientY: number): CardPick | null;
+  /** An element's corners (tl, tr, br, bl) in px relative to the card's container. */
+  project(uid: string): { x: number; y: number }[] | null;
 }
 
 interface RuntimeLiftedMesh {
@@ -206,6 +232,8 @@ export function ChristmasCard3D({
   onOpenProgress,
   onReady,
   elements,
+  interactive = true,
+  handleRef,
 }: ChristmasCard3DProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const coverImageRef = useRef<HTMLImageElement | null>(null);
@@ -234,6 +262,13 @@ export function ChristmasCard3D({
   const elementLayerRef = useRef<ElementLayer | null>(null);
   // Decided once per mount: a card is either an editor/letter card or a template card.
   const bareRef = useRef(elements !== undefined);
+  const interactiveRef = useRef(interactive);
+  interactiveRef.current = interactive;
+  const pickApiRef = useRef<CardHandle | null>(null);
+  useImperativeHandle(handleRef, () => ({
+    pick: (cx, cy) => pickApiRef.current?.pick(cx, cy) ?? null,
+    project: (uid) => pickApiRef.current?.project(uid) ?? null,
+  }), []);
   callbacksRef.current = { onToggleOpen, onOpenProgress, onReady };
 
   useEffect(() => {
@@ -654,7 +689,53 @@ export function ChristmasCard3D({
     const lampTarget = new THREE.Vector3(CARD_W / 2, 0, 0);
     const lampSurfaces: THREE.Object3D[] = [coverMesh, sheetMesh, rightMesh];
 
+    const pickRay = new THREE.Raycaster();
+    const pickNdc = new THREE.Vector2();
+    const toNdc = (cx: number, cy: number) => {
+      const rect = container.getBoundingClientRect();
+      pickNdc.set(((cx - rect.left) / rect.width) * 2 - 1, -((cy - rect.top) / rect.height) * 2 + 1);
+      return pickNdc;
+    };
+    const faceOf = (panel: THREE.Object3D, normalZ: number): Face | null => {
+      if (panel === sheetMesh && normalZ > 0) return "inside-right";
+      if (panel === coverMesh && normalZ < 0) return "inside-left";
+      return null;
+    };
+    pickApiRef.current = {
+      pick(cx, cy) {
+        pickRay.setFromCamera(toNdc(cx, cy), camera);
+        const layer = elementLayerRef.current?.meshes() ?? [];
+        const hits = pickRay.intersectObjects([...layer, coverMesh, sheetMesh], false);
+        for (const hit of hits) {
+          const isElement = typeof hit.object.userData.uid === "string";
+          const panel = isElement ? hit.object.parent : hit.object;
+          if (!panel) continue;
+          const normalZ = isElement ? (panel === coverMesh ? -1 : 1) : (hit.face?.normal.z ?? 0);
+          const face = faceOf(panel, normalZ);
+          if (!face) continue;
+          const local = panel.worldToLocal(hit.point.clone());
+          const at = localToPlacement(face, local.x, local.y);
+          return { face, x: at.x, y: at.y, uid: isElement ? (hit.object.userData.uid as string) : null };
+        }
+        return null;
+      },
+      project(uid) {
+        const mesh = elementLayerRef.current?.meshes().find((m) => m.userData.uid === uid);
+        if (!mesh) return null;
+        const pos = mesh.geometry.attributes.position as THREE.BufferAttribute;
+        // PlaneGeometry(…, SEGMENTS, 1): top row 0..S, bottom row S+1..2S+1.
+        const last = pos.count / 2 - 1;
+        const rect = container.getBoundingClientRect();
+        return [0, last, pos.count - 1, last + 1].map((i) => {
+          const v = new THREE.Vector3().fromBufferAttribute(pos, i);
+          mesh.localToWorld(v).project(camera);
+          return { x: ((v.x + 1) / 2) * rect.width, y: ((1 - v.y) / 2) * rect.height };
+        });
+      },
+    };
+
     const onPointerDown = (e: PointerEvent) => {
+      if (!interactiveRef.current) return;
       ptr.down = true;
       ptr.over = true;
       ptr.mode = "tilt";
@@ -798,7 +879,9 @@ export function ChristmasCard3D({
     const postfx: PostfxStack = createPostfxStack(renderer, scene, camera);
     handleResize();
     camera.position.z = stateRef.current.isOpen ? stage.openZ : stage.closedZ;
-    window.addEventListener("resize", handleResize);
+    // The container, not the window: editor panels change its size without a window resize.
+    const resizeObserver = new ResizeObserver(() => handleResize());
+    resizeObserver.observe(container);
 
     let animId = 0;
     let elapsed = 0;
@@ -1034,7 +1117,7 @@ export function ChristmasCard3D({
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
       domEl.removeEventListener("pointerleave", onPointerLeave);
-      window.removeEventListener("resize", handleResize);
+      resizeObserver.disconnect();
       postfx.dispose();
       if (sceneHandlesRef.current) {
         for (const lm of sceneHandlesRef.current.liftedMeshes) {
@@ -1069,6 +1152,7 @@ export function ChristmasCard3D({
       }
       elementLayerRef.current?.dispose();
       elementLayerRef.current = null;
+      pickApiRef.current = null;
       sceneHandlesRef.current = null;
       envRT.dispose();
       pmrem.dispose();

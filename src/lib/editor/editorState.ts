@@ -24,7 +24,7 @@ type EnvelopeFields = Pick<
 >;
 
 export type EditorAction =
-  | { type: "add-sticker"; stickerId: string; face: Face; uid: string }
+  | { type: "add-sticker"; stickerId: string; face: Face; uid: string; at?: { x: number; y: number } }
   | { type: "add-text"; face: Face; uid: string; x: number; y: number; text: string; font: FontId; ink: Ink }
   | { type: "transform"; uid: string; patch: Partial<Pick<Placement, "x" | "y" | "scale" | "rotation">>; record: boolean }
   | { type: "update-text"; uid: string; patch: Partial<{ text: string; font: FontId; ink: Ink }> }
@@ -126,8 +126,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         stickerId: action.stickerId,
         uid: action.uid,
         face: action.face,
-        x: 0.5,
-        y: 0.5,
+        x: clamp(action.at?.x ?? 0.5, 0, 1),
+        y: clamp(action.at?.y ?? 0.5, 0, 1),
         scale: 1,
         rotation: 0,
         z: topZ(elements, action.face),
