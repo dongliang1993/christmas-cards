@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type Dispatch } from "react";
+import { useEffect, useRef, useState, type Dispatch } from "react";
 import { nanoid } from "nanoid";
 import { ChevronLeft, ChevronRight, Eye, EyeOff, LayoutTemplate, Redo2, Sticker, Type, Undo2, ZoomIn, ZoomOut, FileText } from "lucide-react";
 import type { CardHandle } from "@/components/ChristmasCard3D";
@@ -21,11 +21,6 @@ const TOOLS: { id: Tool; icon: typeof Sticker }[] = [
 interface Props {
   state: EditorState;
   dispatch: Dispatch<EditorAction>;
-}
-
-/** Desktop layout breakpoint (Tailwind lg). */
-function isDesktop(): boolean {
-  return typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches;
 }
 
 function IconButton(props: { label: string; onClick(): void; disabled?: boolean; active?: boolean; children: React.ReactNode }) {
@@ -58,6 +53,15 @@ export function EditorShell({ state, dispatch }: Props) {
   // Phones: the panel is a bottom sheet that opens on a tool tap or a selection.
   const [sheet, setSheet] = useState(false);
   const sheetOpen = sheet || Boolean(state.selected);
+  // Read after mount: the server render cannot know the screen width.
+  const [desktop, setDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const update = () => setDesktop(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
   const pageIndex = PAGES.indexOf(page);
 
   const goInside = () => setPage("inside");
@@ -94,7 +98,7 @@ export function EditorShell({ state, dispatch }: Props) {
             className="order-3 flex w-full shrink-0 flex-row justify-around gap-1 border-t border-stone-200/70 px-2 py-1.5 lg:order-none lg:w-16 lg:flex-col lg:justify-start lg:border-r lg:border-t-0 lg:px-0 lg:py-3"
           >
             {TOOLS.map(({ id, icon: Icon }) => {
-              const active = tool === id && !state.selected && (sheetOpen || isDesktop());
+              const active = tool === id && !state.selected && (sheetOpen || desktop);
               return (
                 <button
                   key={id}
