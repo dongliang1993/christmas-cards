@@ -203,6 +203,22 @@ export function createInsideRightBaseCanvas(
   return canvas;
 }
 
+/** The insert sheet with nothing on it: the editor places text and stickers as meshes. */
+export function createBlankSheetCanvas(templateId: CardTemplateId): HTMLCanvasElement {
+  const w = 780;
+  const h = 1130;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return canvas;
+  addPaperGrain(ctx, w, h, TEMPLATE_MAP[templateId].insideTint);
+  ctx.strokeStyle = "rgba(150, 134, 118, 0.14)";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(18, 18, w - 36, h - 36);
+  return canvas;
+}
+
 export function createInsideRightSheetCanvas(
   templateId: CardTemplateId,
   message: string,

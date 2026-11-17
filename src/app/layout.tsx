@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Caveat, Inter } from "next/font/google";
+import { Caveat, Inter, Long_Cang } from "next/font/google";
 import "./globals.css";
 
 const inter = Inter({
@@ -11,6 +11,14 @@ const caveat = Caveat({
   subsets: ["latin"],
   weight: ["500", "600"],
   variable: "--font-caveat",
+});
+
+// Chinese handwriting for text on the card (font "hand-zh"). Self-hosted by
+// next/font at build time, so it loads where Google Fonts is blocked.
+const handZh = Long_Cang({
+  weight: "400",
+  preload: false,
+  variable: "--font-hand-zh",
 });
 
 export const metadata: Metadata = {
@@ -25,7 +33,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN" className={`${inter.variable} ${caveat.variable}`}>
+    <html lang="zh-CN" className={`${inter.variable} ${caveat.variable} ${handZh.variable}`}>
       <body className="font-sans antialiased bg-[#fbfaf9] text-stone-900">
         {children}
       </body>

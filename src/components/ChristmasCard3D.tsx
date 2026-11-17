@@ -5,7 +5,8 @@ import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { RectAreaLightUniformsLib } from "three/examples/jsm/lights/RectAreaLightUniformsLib.js";
 import { CARD_ASSETS } from "@/lib/cardAssets";
-import { CARD_H, CARD_THICKNESS, CARD_W } from "@/lib/cardConstants";
+import { CARD_H, CARD_THICKNESS, CARD_W, SHEET_H, SHEET_THICKNESS, SHEET_W } from "@/lib/cardConstants";
+import { createElementLayer, type ElementLayer, type LayerElement } from "@/lib/card/elementMeshes";
 import {
   applyBow,
   BOW_AMP,
@@ -26,6 +27,7 @@ import { buildPaperNormalTile, buildSurface, type CoverSurface } from "@/lib/car
 import { fitStage, studioBackgroundColor, type StageFit } from "@/lib/cardStage";
 import {
   createBackCanvas,
+  createBlankSheetCanvas,
   createInsideLeftCanvas,
   createInsideRightBaseCanvas,
   createInsideRightSheetCanvas,
@@ -45,6 +47,12 @@ interface ChristmasCard3DProps {
   onToggleOpen?: () => void;
   onOpenProgress?: (progress: number) => void;
   onReady?: () => void;
+  /**
+   * Stickers and text placed by the sender. When given, the inside pages are
+   * bare paper and these are drawn as their own meshes instead of the
+   * template's motifs and `message`.
+   */
+  elements?: LayerElement[];
 }
 
 interface RuntimeLiftedMesh {
@@ -197,6 +205,7 @@ export function ChristmasCard3D({
   onToggleOpen,
   onOpenProgress,
   onReady,
+  elements,
 }: ChristmasCard3DProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const coverImageRef = useRef<HTMLImageElement | null>(null);
@@ -222,6 +231,9 @@ export function ChristmasCard3D({
   });
 
   const callbacksRef = useRef({ onToggleOpen, onOpenProgress, onReady });
+  const elementLayerRef = useRef<ElementLayer | null>(null);
+  // Decided once per mount: a card is either an editor/letter card or a template card.
+  const bareRef = useRef(elements !== undefined);
   callbacksRef.current = { onToggleOpen, onOpenProgress, onReady };
 
   useEffect(() => {
@@ -426,9 +438,7 @@ export function ChristmasCard3D({
     cardCenterGroup.add(rightMesh);
     const rightBend = captureBendBuffers(rightGeo);
 
-    const sheetW = CARD_W * 0.84;
-    const sheetH = CARD_H * 0.87;
-    const sheetGeo = new THREE.BoxGeometry(sheetW, sheetH, 0.008, BEND_SEGMENTS, 1, 1);
+    const sheetGeo = new THREE.BoxGeometry(SHEET_W, SHEET_H, SHEET_THICKNESS, BEND_SEGMENTS, 1, 1);
     const sheetMesh = new THREE.Mesh(sheetGeo, [
       paperEdgeMat,
       paperEdgeMat,
@@ -544,6 +554,14 @@ export function ChristmasCard3D({
     });
     const cardSnow = new THREE.Points(cardSnowGeo, cardSnowMat);
     frontPivot.add(cardSnow);
+
+    elementLayerRef.current = createElementLayer(
+      {
+        "inside-left": { parent: coverMesh, bendWidth: CARD_W },
+        "inside-right": { parent: sheetMesh, bendWidth: CARD_W },
+      },
+      maxAnisotropy,
+    );
 
     sceneHandlesRef.current = {
       coverBaseMat,
@@ -852,6 +870,7 @@ export function ChristmasCard3D({
       applyBow(frontGeo, CARD_W, bend, coverBend);
       applyBow(rightGeo, CARD_W, bend * 0.35, rightBend);
       applyBow(sheetGeo, CARD_W, bend * 0.35, sheetBend);
+      elementLayerRef.current?.applyBend({ "inside-left": bend, "inside-right": bend * 0.35 });
 
       const handles = sceneHandlesRef.current;
       if (handles) {
@@ -1048,6 +1067,8 @@ export function ChristmasCard3D({
       if (domEl.parentNode === container) {
         container.removeChild(domEl);
       }
+      elementLayerRef.current?.dispose();
+      elementLayerRef.current = null;
       sceneHandlesRef.current = null;
       envRT.dispose();
       pmrem.dispose();
@@ -1139,7 +1160,9 @@ export function ChristmasCard3D({
         const oldSheet = h.insideRightSheetMat.map;
 
         h.insideLeftMat.map = makeTexture(
-          createInsideLeftCanvas(templateId, coverImg, spec.motifs.left),
+          bareRef.current
+            ? createInsideLeftCanvas(templateId, null, [])
+            : createInsideLeftCanvas(templateId, coverImg, spec.motifs.left),
           h.maxAnisotropy,
         );
         h.insideRightBaseMat.map = makeTexture(
@@ -1151,26 +1174,23 @@ export function ChristmasCard3D({
           h.maxAnisotropy,
         );
         h.insideRightSheetMat.map = makeTexture(
-          createInsideRightSheetCanvas(
-            templateId,
-            message,
-            signature,
-            coverImg,
-            spec.motifs.insert,
-          ),
+          bareRef.current
+            ? createBlankSheetCanvas(templateId)
+            : createInsideRightSheetCanvas(templateId, message, signature, coverImg, spec.motifs.insert),
           h.maxAnisotropy,
         );
 
-        // Stickers get the same paint relief + gloss as the cover, so the
-        // pointer lamp glints on them once the card is open. Baked from the
-        // sticker layer only: text stays flat ink.
-        applySurface(
+        // Template stickers get the same paint relief + gloss as the cover, so
+        // the pointer lamp glints on them once the card is open. Baked from the
+        // sticker layer only: text stays flat ink. Bare pages carry their
+        // stickers as meshes, which bring their own relief.
+        if (!bareRef.current) applySurface(
           h.insideLeftMat,
           buildSurface(createInsideLeftCanvas(templateId, coverImg, spec.motifs.left, true)),
           h.maxAnisotropy,
           h.paperNormalTex,
         );
-        applySurface(
+        if (!bareRef.current) applySurface(
           h.insideRightSheetMat,
           buildSurface(
             createInsideRightSheetCanvas(templateId, "", "", coverImg, spec.motifs.insert, true),
@@ -1248,7 +1268,7 @@ export function ChristmasCard3D({
   // Update message/signature on inside-right insert sheet
   useEffect(() => {
     const h = sceneHandlesRef.current;
-    if (!h) return;
+    if (!h || bareRef.current) return;
 
     const spec = CARD_ASSETS[templateId];
     const oldSheet = h.insideRightSheetMat.map;
@@ -1266,6 +1286,10 @@ export function ChristmasCard3D({
     oldSheet?.dispose();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateId, message, signature]);
+
+  useEffect(() => {
+    elementLayerRef.current?.sync(elements ?? []);
+  }, [elements]);
 
   return (
     <div
