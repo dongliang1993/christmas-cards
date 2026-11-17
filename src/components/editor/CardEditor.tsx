@@ -6,7 +6,7 @@ import { PenLine, Sticker, Undo2 } from "lucide-react";
 import { ChristmasCard3D, type CardHandle, type CardPick } from "@/components/ChristmasCard3D";
 import type { EditorAction, EditorElement, EditorState } from "@/lib/editor/editorState";
 import { pinchTransform, type Point } from "@/lib/editor/gestures";
-import type { Face } from "@/lib/letter/model";
+import type { Face, PaperStock } from "@/lib/letter/model";
 import { SelectionOverlay } from "./SelectionOverlay";
 import { StickerTray } from "./StickerTray";
 import { TextComposer } from "./TextComposer";
@@ -14,6 +14,7 @@ import { TextComposer } from "./TextComposer";
 interface Props {
   state: EditorState;
   dispatch: Dispatch<EditorAction>;
+  paper?: PaperStock;
 }
 
 const NEW_TEXT = "写点什么";
@@ -34,7 +35,7 @@ type Gesture =
  * The card itself is the canvas (spec §4.3): drag stickers from the tray
  * onto a page, tap a page to write, drag / pinch / handle to arrange.
  */
-export function CardEditor({ state, dispatch }: Props) {
+export function CardEditor({ state, dispatch, paper }: Props) {
   const card = useRef<CardHandle | null>(null);
   const pointers = useRef(new Map<number, Point>());
   const gesture = useRef<Gesture | null>(null);
@@ -142,6 +143,7 @@ export function CardEditor({ state, dispatch }: Props) {
           isOpen
           isPaused={false}
           elements={state.draft.elements}
+          paper={paper}
           interactive={false}
           handleRef={card}
         />
