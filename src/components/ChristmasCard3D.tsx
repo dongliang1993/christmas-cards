@@ -27,7 +27,7 @@ import {
 } from "@/lib/cardInteract";
 import { createPostfxStack, type PostfxStack } from "@/lib/cardPostfx";
 import { buildPaperNormalTile, buildSurface, type CoverSurface } from "@/lib/cardRelief";
-import { fitStage, studioBackgroundColor, type StageFit } from "@/lib/cardStage";
+import { fitStage, shadowFootprint, studioBackgroundColor, type StageFit } from "@/lib/cardStage";
 import {
   createBackCanvas,
   createBlankSheetCanvas,
@@ -1109,8 +1109,12 @@ export function ChristmasCard3D({
         THREE.MathUtils.lerp(0.24, baseRotZ + floatRotZ, ease);
 
       shadowMat.opacity = ease;
-      // Open card is twice as wide; the padding is shared, hence < 2.
-      shadowPlane.scale.set(1 + 0.68 * s.openProgress, 1.0, 1.0);
+      // Follow what actually casts the shadow: a cover mid-swing throws none
+      // to the left of the spine. The soft padding keeps its width.
+      const foot = shadowFootprint(openAngle, CARD_W);
+      const footW = foot.right - foot.left;
+      shadowPlane.position.x = cardCenterGroup.position.x + (foot.left + foot.right) / 2 + 0.06;
+      shadowPlane.scale.set((footW + CARD_W * (SHADOW_PAD_X - 1)) / (CARD_W * SHADOW_PAD_X), 1.0, 1.0);
 
       postfx.render(dt);
     };

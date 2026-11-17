@@ -89,3 +89,12 @@ export function fitStage(
   const camYPerZ = -(DOCK_RESERVE / 2) * 2 * tanV;
   return { closedZ, openZ, camYPerZ };
 }
+
+/**
+ * Horizontal extent, in the card's own frame (spine at 0, right panel 0..W),
+ * of what casts a shadow: the right panel plus the cover's projection at
+ * `openAngle` (0 shut on top of the panel, π lying open to the left).
+ */
+export function shadowFootprint(openAngle: number, cardW: number): { left: number; right: number } {
+  return { left: Math.min(0, cardW * Math.cos(openAngle)), right: cardW };
+}

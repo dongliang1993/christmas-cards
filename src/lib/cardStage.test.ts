@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
-import { fitStage, studioBackgroundColor, STUDIO_BG_HEX } from "./cardStage";
+import { fitStage, shadowFootprint, studioBackgroundColor, STUDIO_BG_HEX } from "./cardStage";
 
 describe("fitStage", () => {
   it("frames the closed card at 62% of the view height on a landscape screen", () => {
@@ -44,3 +44,25 @@ function neutral(c: number[]): number[] {
     return scaled + (newPeak - scaled) * g;
   });
 }
+
+describe("shadowFootprint", () => {
+  const W = 2.6;
+
+  it("covers just the right panel when the card is shut", () => {
+    const f = shadowFootprint(0, W);
+    expect(f.left).toBeCloseTo(0);
+    expect(f.right).toBeCloseTo(W);
+  });
+
+  it("covers both panels when the card lies open", () => {
+    const f = shadowFootprint(Math.PI, W);
+    expect(f.left).toBeCloseTo(-W);
+    expect(f.right).toBeCloseTo(W);
+  });
+
+  it("does not reach past the swinging cover mid-turn", () => {
+    // Cover standing straight up casts nothing to the left of the spine.
+    const f = shadowFootprint(Math.PI / 2, W);
+    expect(f.left).toBeCloseTo(0);
+  });
+});
