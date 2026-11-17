@@ -1,23 +1,30 @@
 "use client";
 
-import { useRef, useState, type Dispatch } from "react";
-import { nanoid } from "nanoid";
-import { PenLine, Sticker, Undo2 } from "lucide-react";
+import { useEffect, useRef, useState, type Dispatch, type RefObject } from "react";
 import { ChristmasCard3D, type CardHandle, type CardPick } from "@/components/ChristmasCard3D";
 import type { EditorAction, EditorElement, EditorState } from "@/lib/editor/editorState";
 import { pinchTransform, type Point } from "@/lib/editor/gestures";
+import type { PageId } from "@/lib/editor/pages";
 import type { Face, PaperStock } from "@/lib/letter/model";
 import { SelectionOverlay } from "./SelectionOverlay";
-import { StickerTray } from "./StickerTray";
-import { TextComposer } from "./TextComposer";
 
 interface Props {
   state: EditorState;
   dispatch: Dispatch<EditorAction>;
   paper?: PaperStock;
+  page: PageId;
+  zoom: number;
+  /** Preview: the card exactly as the recipient sees it, no editing. */
+  preview: boolean;
+  onPage(page: PageId): void;
+  card: RefObject<CardHandle | null>;
 }
 
-const NEW_TEXT = "写点什么";
+/**
+ * The editor's 100%: the gallery framing leaves room for a floating dock;
+ * here the canvas has its own space, so the card can fill more of it.
+ */
+const EDITOR_FIT = 1.3;
 
 type Gesture =
   | { kind: "drag"; uid: string; face: Face; start: CardPick; from: { x: number; y: number }; recorded: boolean }
@@ -31,26 +38,53 @@ type Gesture =
       recorded: boolean;
     };
 
+/** Outline of the inside page new things land on (spec §13.4). */
+function FocusOutline({ card, face }: { card: RefObject<CardHandle | null>; face: Face }) {
+  const [pts, setPts] = useState<Point[] | null>(null);
+  useEffect(() => {
+    let frame = 0;
+    const tick = () => {
+      setPts(card.current?.projectFace(face) ?? null);
+      frame = requestAnimationFrame(tick);
+    };
+    tick();
+    return () => cancelAnimationFrame(frame);
+  }, [card, face]);
+  if (!pts) return null;
+  return (
+    <svg className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden>
+      <polygon
+        points={pts.map((p) => `${p.x},${p.y}`).join(" ")}
+        fill="#f59e0b"
+        fillOpacity={0.035}
+        stroke="#d97706"
+        strokeOpacity={0.45}
+        strokeWidth={1.5}
+        strokeDasharray="6 5"
+      />
+    </svg>
+  );
+}
+
 /**
- * The card itself is the canvas (spec §4.3): drag stickers from the tray
- * onto a page, tap a page to write, drag / pinch / handle to arrange.
+ * The card is the canvas (spec §4.3, §13): pick, drag, pinch and handles act
+ * on the 3D pages directly. Tapping an element on either page edits it.
  */
-export function CardEditor({ state, dispatch, paper }: Props) {
-  const card = useRef<CardHandle | null>(null);
+export function CardEditor({ state, dispatch, paper, page, zoom, preview, onPage, card }: Props) {
   const pointers = useRef(new Map<number, Point>());
   const gesture = useRef<Gesture | null>(null);
-  const [panel, setPanel] = useState<"stickers" | "none">("stickers");
-  const [writing, setWriting] = useState(false);
-  const [lastFace, setLastFace] = useState<Face>("inside-left");
-  const [freshText, setFreshText] = useState<string | null>(null);
-
-  const selected = state.draft.elements.find((e) => e.uid === state.selected) ?? null;
+  const editing = page === "inside" && !preview;
+  const selected = editing ? (state.draft.elements.find((e) => e.uid === state.selected) ?? null) : null;
   const byUid = (uid: string): EditorElement | undefined => state.draft.elements.find((e) => e.uid === uid);
-
   const move = (uid: string, patch: Partial<Pick<EditorElement, "x" | "y" | "scale" | "rotation">>, record: boolean) =>
     dispatch({ type: "transform", uid, patch, record });
 
   const onPointerDown = (e: React.PointerEvent) => {
+    if (!editing) {
+      // On the cover a tap opens the card to the inside pages.
+      if (page === "cover" && !preview) onPage("inside");
+      return;
+    }
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     e.currentTarget.setPointerCapture(e.pointerId);
 
@@ -72,20 +106,13 @@ export function CardEditor({ state, dispatch, paper }: Props) {
     if (pointers.current.size > 1) return;
 
     const pick = card.current?.pick(e.clientX, e.clientY) ?? null;
-    if (pick) setLastFace(pick.face);
-    if (writing && pick && !pick.uid) {
-      const uid = nanoid(8);
-      dispatch({ type: "add-text", face: pick.face, uid, x: pick.x, y: pick.y, text: NEW_TEXT, font: "hand-zh", ink: "black" });
-      setWriting(false);
-      setFreshText(uid);
-      return;
-    }
     if (pick?.uid) {
       const el = byUid(pick.uid);
       dispatch({ type: "select", uid: pick.uid });
       if (el) gesture.current = { kind: "drag", uid: el.uid, face: el.face, start: pick, from: { x: el.x, y: el.y }, recorded: false };
     } else {
       dispatch({ type: "select", uid: null });
+      if (pick) dispatch({ type: "focus-face", face: pick.face });
       gesture.current = null;
     }
   };
@@ -117,95 +144,42 @@ export function CardEditor({ state, dispatch, paper }: Props) {
 
   const onPointerUp = (e: React.PointerEvent) => {
     pointers.current.delete(e.pointerId);
-    if (pointers.current.size === 0) gesture.current = null;
-    else if (gesture.current?.kind === "pinch") gesture.current = null; // lift one finger: stop, don't jump
+    if (pointers.current.size === 0 || gesture.current?.kind === "pinch") gesture.current = null;
   };
 
-  const addSticker = (stickerId: string, face: Face, at?: { x: number; y: number }) =>
-    dispatch({ type: "add-sticker", stickerId, face, uid: nanoid(8), at });
-
   return (
-    <div className="flex h-full w-full flex-col lg:flex-row">
-      <div
-        className="relative min-h-0 flex-1 touch-none select-none"
-        // Keep focus where it is (e.g. a text field that just opened).
-        onMouseDown={(e) => e.preventDefault()}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-        style={{ cursor: writing ? "text" : "default" }}
-      >
-        <ChristmasCard3D
-          templateId={state.draft.templateId}
-          message=""
-          signature=""
-          isOpen
-          isPaused={false}
-          elements={state.draft.elements}
-          paper={paper}
-          interactive={false}
-          handleRef={card}
-        />
-        {selected && (
-          <SelectionOverlay
-            card={card}
-            uid={selected.uid}
-            current={{ scale: selected.scale, rotation: selected.rotation }}
-            onTransform={(patch, record) => move(selected.uid, patch, record)}
-            onDelete={() => dispatch({ type: "remove", uid: selected.uid })}
-          />
-        )}
-
-        {writing && (
-          <p className="pointer-events-none absolute left-1/2 top-6 -translate-x-1/2 rounded-full bg-stone-900/85 px-3 py-1.5 text-xs text-white">
-            点一下纸面，在那里写字
-          </p>
-        )}
-      </div>
-
-      {/* Beside the card on desktop, under it on phones: never over the pages. */}
-      <aside className="z-20 flex shrink-0 flex-col border-t border-stone-200/80 bg-white/95 lg:w-80 lg:border-l lg:border-t-0">
-        {selected?.kind === "text" ? (
-          <TextComposer
-            text={selected.text}
-            font={selected.font}
-            ink={selected.ink}
-            autoFocus={freshText === selected.uid}
-            onChange={(patch) => dispatch({ type: "update-text", uid: selected.uid, patch })}
-            onDelete={() => dispatch({ type: "remove", uid: selected.uid })}
-          />
-        ) : panel === "stickers" ? (
-          <StickerTray
-            onTap={(id) => addSticker(id, lastFace)}
-            onDrop={(id, x, y) => {
-              const at = card.current?.pick(x, y);
-              if (at) addSticker(id, at.face, { x: at.x, y: at.y });
-            }}
-          />
-        ) : null}
-        <div className="mt-auto flex items-center gap-1 border-t border-stone-100 px-2 py-1.5">
-          <ToolButton active={panel === "stickers" && !selected} onClick={() => { dispatch({ type: "select", uid: null }); setPanel(panel === "stickers" ? "none" : "stickers"); }} icon={<Sticker className="h-4 w-4" />} label="贴纸" />
-          <ToolButton active={writing} onClick={() => { dispatch({ type: "select", uid: null }); setWriting(!writing); }} icon={<PenLine className="h-4 w-4" />} label="写字" />
-          <span className="ml-auto text-[11px] text-stone-400">{lastFace === "inside-left" ? "左页" : "右页"}</span>
-          <ToolButton active={false} disabled={state.past.length === 0} onClick={() => dispatch({ type: "undo" })} icon={<Undo2 className="h-4 w-4" />} label="撤销" />
-        </div>
-      </aside>
-    </div>
-  );
-}
-
-function ToolButton(props: { active: boolean; disabled?: boolean; onClick(): void; icon: React.ReactNode; label: string }) {
-  return (
-    <button
-      type="button"
-      onClick={props.onClick}
-      disabled={props.disabled}
-      aria-pressed={props.active}
-      className={`flex h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-medium transition disabled:opacity-35 ${props.active ? "bg-stone-900 text-white" : "text-stone-700 hover:bg-stone-100"}`}
+    <div
+      className="relative h-full w-full touch-none select-none"
+      // Keep focus where it is (e.g. a text field in the side panel).
+      onMouseDown={(e) => e.preventDefault()}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      style={{ cursor: page === "cover" && !preview ? "pointer" : "default" }}
     >
-      {props.icon}
-      {props.label}
-    </button>
+      <ChristmasCard3D
+        templateId={state.draft.templateId}
+        message=""
+        signature=""
+        isOpen={page === "inside"}
+        isPaused={false}
+        elements={state.draft.elements}
+        paper={paper}
+        zoom={zoom * EDITOR_FIT}
+        interactive={false}
+        handleRef={card}
+      />
+      {editing && <FocusOutline card={card} face={state.focusFace} />}
+      {selected && (
+        <SelectionOverlay
+          card={card}
+          uid={selected.uid}
+          current={{ scale: selected.scale, rotation: selected.rotation }}
+          onTransform={(patch, record) => move(selected.uid, patch, record)}
+          onDelete={() => dispatch({ type: "remove", uid: selected.uid })}
+        />
+      )}
+    </div>
   );
 }

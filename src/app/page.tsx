@@ -1,5 +1,5 @@
-import { SenderFlow } from "@/components/flow/SenderFlow";
+import { Gallery } from "@/components/home/Gallery";
 
 export default function Home() {
-  return <SenderFlow />;
+  return <Gallery />;
 }

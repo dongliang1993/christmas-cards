@@ -2,26 +2,32 @@
 
 import { useEffect, useReducer, useState } from "react";
 import { ChristmasCard3D } from "@/components/ChristmasCard3D";
-import { CardEditor } from "@/components/editor/CardEditor";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { EditorShell } from "@/components/editor/EditorShell";
 import { EnvelopeScene } from "@/components/envelope/EnvelopeScene";
 import { CARD_ASSETS } from "@/lib/cardAssets";
-import { PAPER_STOCKS } from "@/lib/card/paperStocks";
 import { lettersApi, type SentLetter } from "@/lib/client/lettersApi";
 import { readOutbox, rememberOutbox } from "@/lib/client/outboxStorage";
 import { clearDraft, loadDraft, saveDraft } from "@/lib/editor/draftStorage";
 import { createEditorState, createInitialDraft, duplicateDraft, editorReducer, toLetterDraft } from "@/lib/editor/editorState";
 import { resolveDeliverAt } from "@/lib/letter/delivery";
-import { PAPER_STOCK_IDS, type DeliveryChoice } from "@/lib/letter/model";
+import type { DeliveryChoice } from "@/lib/letter/model";
+import type { CardTemplateId } from "@/lib/types";
 import { letterDraftSchema } from "@/lib/letter/schema";
-import { CARD_TEMPLATES } from "@/lib/templates";
 import { AddressPanel } from "./AddressPanel";
 import { SentPanel } from "./SentPanel";
 
 type Step = "make" | "address" | "seal" | "sent";
 
-/** 做卡 → 写收件人和火漆 → 封装 → 寄出 (spec §4). */
-export function SenderFlow() {
-  const [state, dispatch] = useReducer(editorReducer, undefined, () => createEditorState(createInitialDraft("first-snow")));
+const STEPS: { id: Exclude<Step, "sent">; label: string }[] = [
+  { id: "make", label: "做卡" },
+  { id: "address", label: "信封" },
+  { id: "seal", label: "封装" },
+];
+
+/** 做卡 → 写收件人和火漆 → 封装 → 寄出 (spec §4, §13). */
+export function SenderFlow({ initialTemplate }: { initialTemplate: CardTemplateId }) {
+  const [state, dispatch] = useReducer(editorReducer, undefined, () => createEditorState(createInitialDraft(initialTemplate)));
   const [step, setStep] = useState<Step>("make");
   const [delivery, setDelivery] = useState<DeliveryChoice>({ kind: "christmas-eve" });
   const [error, setError] = useState<string | null>(null);
@@ -31,9 +37,11 @@ export function SenderFlow() {
 
   // Restore the draft in progress once, then keep saving it.
   useEffect(() => {
+    // Resume the draft only for the card picked in the gallery; another card starts fresh.
     const saved = loadDraft(window.localStorage);
-    if (saved) dispatch({ type: "load", draft: saved });
+    if (saved && saved.templateId === initialTemplate) dispatch({ type: "load", draft: saved });
     setRestored(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
     if (!restored) return;
@@ -74,53 +82,45 @@ export function SenderFlow() {
 
   return (
     <main className="flex h-dvh w-screen flex-col overflow-hidden bg-[#fbfaf9] select-none">
-      <header className="flex shrink-0 items-center gap-3 border-b border-stone-200/70 px-4 py-2.5">
-        <h1 className="text-sm font-semibold text-stone-900">圣诞信</h1>
-        <ol className="flex items-center gap-1.5 text-[11px] text-stone-400">
-          {(["make", "address", "seal", "sent"] as const).map((s, i) => (
-            <li key={s} className={step === s ? "font-medium text-stone-900" : ""}>
-              {i > 0 && <span className="mx-1">·</span>}
-              {{ make: "做卡", address: "信封", seal: "封装", sent: "寄出" }[s]}
-            </li>
-          ))}
+      {/* Flow only (spec §13.2): back · steps · the step's one primary action. */}
+      <header className="flex shrink-0 items-center gap-3 border-b border-stone-200/70 px-3 py-2.5">
+        <a href="/" className="flex items-center gap-1 rounded-lg px-1.5 py-1 text-sm font-semibold text-stone-900 hover:bg-stone-100">
+          <ChevronLeft className="h-4 w-4" /> 圣诞信
+        </a>
+        <ol className="mx-auto flex items-center gap-1 text-xs">
+          {STEPS.map((s, i) => {
+            const done = STEPS.findIndex((x) => x.id === step) > i || step === "sent";
+            return (
+              <li key={s.id} className="flex items-center gap-1">
+                {i > 0 && <ChevronRight className="h-3.5 w-3.5 text-stone-300" />}
+                <button
+                  type="button"
+                  disabled={!done || step === "seal" || step === "sent"}
+                  onClick={() => setStep(s.id)}
+                  aria-current={step === s.id ? "step" : undefined}
+                  className={`rounded-md px-1.5 py-0.5 ${step === s.id ? "font-semibold text-stone-900" : done ? "text-stone-600 hover:bg-stone-100" : "text-stone-400"}`}
+                >
+                  {s.label}
+                </button>
+              </li>
+            );
+          })}
         </ol>
         {step === "make" && (
-          <div className="ml-auto flex items-center gap-1.5 overflow-x-auto">
-            {CARD_TEMPLATES.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                title={t.name}
-                aria-label={`模板：${t.name}`}
-                aria-pressed={draft.templateId === t.id}
-                onClick={() => dispatch({ type: "set", patch: { templateId: t.id } })}
-                className={`shrink-0 rounded-md p-0.5 ${draft.templateId === t.id ? "ring-2 ring-stone-900" : ""}`}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={CARD_ASSETS[t.id].coverSrc} alt="" className="h-8 w-6 rounded-[3px] object-cover" />
-              </button>
-            ))}
-            <span className="mx-1 h-5 w-px bg-stone-200" />
-            {PAPER_STOCK_IDS.map((p) => (
-              <button
-                key={p}
-                type="button"
-                aria-pressed={draft.paper === p}
-                onClick={() => dispatch({ type: "set", patch: { paper: p } })}
-                className={`shrink-0 rounded-lg px-2 py-1 text-[11px] ${draft.paper === p ? "bg-stone-900 text-white" : "bg-stone-100 text-stone-700"}`}
-              >
-                {PAPER_STOCKS[p].label}
-              </button>
-            ))}
-            <button type="button" onClick={() => setStep("address")} className="ml-1 shrink-0 rounded-lg bg-stone-900 px-3 py-1.5 text-xs font-medium text-white">
-              下一步
-            </button>
-          </div>
+          <button type="button" onClick={() => setStep("address")} className="rounded-xl bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800">
+            下一步
+          </button>
         )}
+        {step === "address" && (
+          <button type="button" onClick={toSeal} className="rounded-xl bg-stone-900 px-4 py-2 text-sm font-medium text-white hover:bg-stone-800">
+            装进信封
+          </button>
+        )}
+        {(step === "seal" || step === "sent") && <span className="w-[92px]" />}
       </header>
 
       <div className="relative min-h-0 flex-1">
-        {step === "make" && <CardEditor state={state} dispatch={dispatch} paper={draft.paper} />}
+        {step === "make" && <EditorShell state={state} dispatch={dispatch} />}
         {step === "address" && (
           <div className="flex h-full flex-col lg:flex-row">
             <div className="relative min-h-[40%] flex-1">
@@ -146,8 +146,6 @@ export function SenderFlow() {
                   })
                 }
                 onDelivery={setDelivery}
-                onBack={() => setStep("make")}
-                onSeal={toSeal}
               />
             </aside>
           </div>

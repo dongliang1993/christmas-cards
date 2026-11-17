@@ -39,7 +39,7 @@ export function TextComposer({ text, font, ink, autoFocus, onChange, onDelete }:
   }, [autoFocus]);
 
   return (
-    <div className="space-y-3 p-4">
+    <div className="space-y-3 px-4 pb-4">
       <textarea
         ref={area}
         value={text}

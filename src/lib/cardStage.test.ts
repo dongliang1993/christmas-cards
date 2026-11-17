@@ -73,7 +73,7 @@ describe("zoomedDistance", () => {
   });
 
   it("clamps zoom to the editor's range", () => {
-    expect(zoomedDistance(10, 9)).toBeCloseTo(5);
+    expect(zoomedDistance(10, 9)).toBeCloseTo(10 / 2.6);
     expect(zoomedDistance(10, 0.01)).toBeCloseTo(10 / 0.6);
   });
 });

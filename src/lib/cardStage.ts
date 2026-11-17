@@ -99,7 +99,8 @@ export function shadowFootprint(openAngle: number, cardW: number): { left: numbe
   return { left: Math.min(0, cardW * Math.cos(openAngle)), right: cardW };
 }
 
-/** Camera distance for an editor zoom level (spec §13.5: 60%–200%). */
+/** Camera distance for a zoom factor (editor shows 60%–200% of its own fitted view). */
 export function zoomedDistance(distance: number, zoom: number): number {
-  return distance / Math.min(2, Math.max(0.6, zoom));
+  // The editor's own 100% is 1.3× the gallery framing, so allow up to 2 × 1.3.
+  return distance / Math.min(2.6, Math.max(0.6, zoom));
 }

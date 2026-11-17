@@ -1100,12 +1100,12 @@ export function ChristmasCard3D({
 
       s.dragRotX = THREE.MathUtils.lerp(
         s.dragRotX,
-        s.targetDragRotX + s.hoverY * 0.06,
+        s.targetDragRotX + (interactiveRef.current ? s.hoverY * 0.06 : 0),
         1 - Math.exp(-dt * 8),
       );
       s.dragRotY = THREE.MathUtils.lerp(
         s.dragRotY,
-        s.targetDragRotY + s.hoverX * 0.08,
+        s.targetDragRotY + (interactiveRef.current ? s.hoverX * 0.08 : 0),
         1 - Math.exp(-dt * 8),
       );
 

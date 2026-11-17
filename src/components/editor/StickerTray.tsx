@@ -28,14 +28,14 @@ export function StickerTray({ onTap, onDrop }: Props) {
   if (error) return <p className="px-4 py-3 text-xs text-red-600">{error}</p>;
 
   return (
-    <div className="flex gap-2 overflow-x-auto px-3 py-2 lg:flex-wrap lg:overflow-visible lg:p-4" role="listbox" aria-label="贴纸">
+    <div className="grid grid-cols-3 gap-2 px-3 pb-4" role="listbox" aria-label="贴纸">
       {stickers.map((s) => (
         <button
           key={s.id}
           type="button"
           title={s.label}
           aria-label={`添加贴纸：${s.label}`}
-          className="h-16 w-16 shrink-0 touch-none rounded-xl bg-stone-50 p-1.5 ring-1 ring-stone-200 transition hover:bg-stone-100"
+          className="aspect-square w-full touch-none rounded-xl bg-stone-50 p-1.5 ring-1 ring-stone-200 transition hover:bg-stone-100"
           onPointerDown={(e) => {
             e.currentTarget.setPointerCapture(e.pointerId);
             press.current = { id: s.id, src: s.src, x: e.clientX, y: e.clientY, dragging: false };

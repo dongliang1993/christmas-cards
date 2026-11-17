@@ -40,8 +40,6 @@ interface Props {
   error: string | null;
   onChange(patch: { recipientName?: string; envelopeColor?: EnvelopeColor; seal?: Seal; audio?: { url: string; name: string } | null }): void;
   onDelivery(choice: DeliveryChoice): void;
-  onBack(): void;
-  onSeal(): void;
 }
 
 function Chip({ active, onClick, children, label }: { active: boolean; onClick(): void; children: React.ReactNode; label?: string }) {
@@ -193,14 +191,6 @@ export function AddressPanel(props: Props) {
 
       {props.error && <p className="rounded-xl bg-red-50 px-3 py-2 text-xs text-red-600" role="alert">{props.error}</p>}
 
-      <div className="mt-auto flex gap-2">
-        <button type="button" onClick={props.onBack} className="rounded-xl px-4 py-2.5 text-sm text-stone-600 hover:bg-stone-100">
-          返回修改卡片
-        </button>
-        <button type="button" onClick={props.onSeal} className="flex-1 rounded-xl bg-stone-900 py-2.5 text-sm font-medium text-white hover:bg-stone-800">
-          装进信封
-        </button>
-      </div>
     </div>
   );
 }
