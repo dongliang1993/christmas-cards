@@ -1,0 +1,68 @@
+import { describe, expect, it } from "vitest";
+import { createEditorState, createInitialDraft, editorReducer, type EditorAction, type EditorState } from "./editorState";
+import { clampZoom, pageLabel, PAGES, stepZoom, ZOOM_MAX, ZOOM_MIN } from "./pages";
+
+const run = (s: EditorState, ...a: EditorAction[]) => a.reduce(editorReducer, s);
+const fresh = () => createEditorState(createInitialDraft("first-snow"));
+const add = (uid: string, face: "inside-left" | "inside-right" = "inside-left"): EditorAction => ({ type: "add-sticker", stickerId: "holly", face, uid });
+const z = (s: EditorState, uid: string) => s.draft.elements.find((e) => e.uid === uid)?.z;
+
+describe("redo", () => {
+  it("restores what undo took back", () => {
+    const s = run(fresh(), add("a"), { type: "transform", uid: "a", patch: { x: 0.1 }, record: true }, { type: "undo" }, { type: "redo" });
+    expect(s.draft.elements.find((e) => e.uid === "a")?.x).toBe(0.1);
+  });
+
+  it("is cleared by a new edit after undo", () => {
+    const s = run(fresh(), add("a"), { type: "undo" }, add("b"));
+    expect(s.future).toHaveLength(0);
+    expect(run(s, { type: "redo" }).draft.elements.some((e) => e.uid === "a")).toBe(false);
+  });
+});
+
+describe("layer", () => {
+  it("moves an element above the next one on its face", () => {
+    const s = run(fresh(), add("a"), add("b"), { type: "layer", uid: "a", dir: 1 });
+    expect(z(s, "a")).toBeGreaterThan(z(s, "b") ?? 0);
+  });
+
+  it("does nothing at the top", () => {
+    const before = run(fresh(), add("a"), add("b"));
+    expect(run(before, { type: "layer", uid: "b", dir: 1 }).draft.elements).toEqual(before.draft.elements);
+  });
+});
+
+describe("focusFace", () => {
+  it("starts on the right page", () => {
+    expect(fresh().focusFace).toBe("inside-right");
+  });
+
+  it("follows the page last added to or selected on", () => {
+    const s = run(fresh(), add("a", "inside-left"));
+    expect(s.focusFace).toBe("inside-left");
+    const msg = s.draft.elements.find((e) => e.kind === "text")!.uid;
+    const t = run(s, { type: "select", uid: msg });
+    expect(t.focusFace).toBe("inside-right");
+  });
+
+  it("can be set by touching a blank page", () => {
+    expect(run(fresh(), { type: "focus-face", face: "inside-left" }).focusFace).toBe("inside-left");
+  });
+});
+
+describe("pages and zoom", () => {
+  it("has the cover then the inside spread", () => {
+    expect(PAGES).toEqual(["cover", "inside"]);
+    expect(pageLabel("inside")).toBe("内页 · 2/2");
+  });
+
+  it("clamps zoom to its range", () => {
+    expect(clampZoom(3)).toBe(ZOOM_MAX);
+    expect(clampZoom(0.1)).toBe(ZOOM_MIN);
+  });
+
+  it("steps zoom by 20%", () => {
+    expect(stepZoom(1, 1)).toBeCloseTo(1.2);
+    expect(stepZoom(1, -1)).toBeCloseTo(0.8);
+  });
+});

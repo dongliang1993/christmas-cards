@@ -16,6 +16,10 @@ export interface EditorState {
   selected: string | null;
   /** Earlier element lists, newest last. */
   past: EditorElement[][];
+  /** Element lists undone, newest last; cleared by any new edit. */
+  future: EditorElement[][];
+  /** The inside page new stickers and text land on (spec §13.4). */
+  focusFace: Face;
 }
 
 type EnvelopeFields = Pick<
@@ -32,6 +36,9 @@ export type EditorAction =
   | { type: "select"; uid: string | null }
   | { type: "set"; patch: Partial<EnvelopeFields> }
   | { type: "undo" }
+  | { type: "redo" }
+  | { type: "layer"; uid: string; dir: 1 | -1 }
+  | { type: "focus-face"; face: Face }
   | { type: "load"; draft: EditorDraft };
 
 /** Where the template's own message sits on the inside-right sheet. */
@@ -60,7 +67,7 @@ export function createInitialDraft(templateId: CardTemplateId): EditorDraft {
 }
 
 export function createEditorState(draft: EditorDraft): EditorState {
-  return { draft, selected: null, past: [] };
+  return { draft, selected: null, past: [], future: [], focusFace: "inside-right" };
 }
 
 /** The draft as the API and storage see it, without editor ids. */
@@ -108,8 +115,9 @@ function topZ(elements: EditorElement[], face: Face): number {
 }
 
 function withElements(state: EditorState, elements: EditorElement[], record: boolean): EditorState {
-  const past = record ? [...state.past, state.draft.elements].slice(-UNDO_DEPTH) : state.past;
-  return { ...state, past, draft: { ...state.draft, elements } };
+  if (!record) return { ...state, draft: { ...state.draft, elements } };
+  const past = [...state.past, state.draft.elements].slice(-UNDO_DEPTH);
+  return { ...state, past, future: [], draft: { ...state.draft, elements } };
 }
 
 function mapElement(state: EditorState, uid: string, fn: (e: EditorElement) => EditorElement): EditorElement[] {
@@ -132,7 +140,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         rotation: 0,
         z: topZ(elements, action.face),
       };
-      return { ...withElements(state, [...elements, added], true), selected: action.uid };
+      return { ...withElements(state, [...elements, added], true), selected: action.uid, focusFace: action.face };
     }
     case "add-text": {
       if (countOn(elements, "text", action.face) >= LIMITS.textsPerFace) return state;
@@ -149,7 +157,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         rotation: 0,
         z: topZ(elements, action.face),
       };
-      return { ...withElements(state, [...elements, added], true), selected: action.uid };
+      return { ...withElements(state, [...elements, added], true), selected: action.uid, focusFace: action.face };
     }
     case "transform": {
       const { x, y, scale, rotation } = action.patch;
@@ -172,8 +180,26 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       const next = elements.filter((e) => e.uid !== action.uid);
       return { ...withElements(state, next, true), selected: state.selected === action.uid ? null : state.selected };
     }
-    case "select":
-      return { ...state, selected: action.uid };
+    case "select": {
+      const face = elements.find((e) => e.uid === action.uid)?.face;
+      return { ...state, selected: action.uid, focusFace: face ?? state.focusFace };
+    }
+    case "focus-face":
+      return { ...state, focusFace: action.face };
+    case "layer": {
+      const el = elements.find((e) => e.uid === action.uid);
+      if (!el) return state;
+      const stack = elements.filter((e) => e.face === el.face).sort((a, b) => a.z - b.z);
+      const i = stack.findIndex((e) => e.uid === el.uid);
+      const other = stack[i + action.dir];
+      if (!other) return state;
+      // Swap places; equal z values get pulled apart so the order is explicit.
+      const [lo, hi] = el.z === other.z ? [el.z, el.z + 1] : [Math.min(el.z, other.z), Math.max(el.z, other.z)];
+      const next = elements.map((e) =>
+        e.uid === el.uid ? { ...e, z: action.dir === 1 ? hi : lo } : e.uid === other.uid ? { ...e, z: action.dir === 1 ? lo : hi } : e,
+      );
+      return withElements(state, next, true);
+    }
     case "set":
       return { ...state, draft: { ...state.draft, ...action.patch } };
     case "undo": {
@@ -183,8 +209,20 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       return {
         ...state,
         past: state.past.slice(0, -1),
+        future: [...state.future, elements].slice(-UNDO_DEPTH),
         draft: { ...state.draft, elements: previous },
         selected: stillThere ? state.selected : null,
+      };
+    }
+    case "redo": {
+      const next = state.future.at(-1);
+      if (!next) return state;
+      return {
+        ...state,
+        future: state.future.slice(0, -1),
+        past: [...state.past, elements].slice(-UNDO_DEPTH),
+        draft: { ...state.draft, elements: next },
+        selected: next.some((e) => e.uid === state.selected) ? state.selected : null,
       };
     }
     case "load":
