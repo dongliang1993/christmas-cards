@@ -109,3 +109,13 @@ export interface PublicLetter {
     audioName: string | null;
   } | null;
 }
+
+/** One row of the sender's outbox. */
+export interface OutboxEntry {
+  id: string;
+  recipientName: string;
+  createdAt: string;
+  deliverAt: string;
+  openedAt: string | null;
+  status: LetterStatus;
+}
