@@ -54,27 +54,35 @@ const audioUrl = z
   .trim()
   .refine((v) => v.startsWith("/api/audio/") || v.startsWith("/uploads/"), "无效的音频路径");
 
-export const letterDraftSchema = z
-  .object({
-    templateId: z.enum(TEMPLATE_IDS),
-    paper: z.enum(PAPER_STOCK_IDS),
-    envelopeColor: z.enum(ENVELOPE_COLORS),
-    seal: sealSchema,
-    recipientName: z.string().trim().min(1, "请填写收件人").max(LIMITS.recipientLength),
-    elements: z.array(elementSchema).max((LIMITS.stickersPerFace + LIMITS.textsPerFace) * FACES.length),
-    audioUrl: audioUrl.nullable(),
-    audioName: z.string().trim().max(160).nullable(),
-  })
-  .superRefine((d, ctx) => {
-    for (const face of FACES) {
-      if (countOn(d.elements, "sticker", face) > LIMITS.stickersPerFace) {
-        ctx.addIssue({ code: "custom", message: `每一面最多 ${LIMITS.stickersPerFace} 张贴纸`, path: ["elements"] });
-      }
-      if (countOn(d.elements, "text", face) > LIMITS.textsPerFace) {
-        ctx.addIssue({ code: "custom", message: `每一面最多 ${LIMITS.textsPerFace} 段文字`, path: ["elements"] });
-      }
+const draftShape = {
+  templateId: z.enum(TEMPLATE_IDS),
+  paper: z.enum(PAPER_STOCK_IDS),
+  envelopeColor: z.enum(ENVELOPE_COLORS),
+  seal: sealSchema,
+  recipientName: z.string().trim().min(1, "请填写收件人").max(LIMITS.recipientLength),
+  elements: z.array(elementSchema).max((LIMITS.stickersPerFace + LIMITS.textsPerFace) * FACES.length),
+  audioUrl: audioUrl.nullable(),
+  audioName: z.string().trim().max(160).nullable(),
+};
+
+function checkLimits(d: { elements: CardElement[] }, ctx: z.RefinementCtx): void {
+  for (const face of FACES) {
+    if (countOn(d.elements, "sticker", face) > LIMITS.stickersPerFace) {
+      ctx.addIssue({ code: "custom", message: `每一面最多 ${LIMITS.stickersPerFace} 张贴纸`, path: ["elements"] });
     }
-  });
+    if (countOn(d.elements, "text", face) > LIMITS.textsPerFace) {
+      ctx.addIssue({ code: "custom", message: `每一面最多 ${LIMITS.textsPerFace} 段文字`, path: ["elements"] });
+    }
+  }
+}
+
+/** A letter ready to send. */
+export const letterDraftSchema = z.object(draftShape).superRefine(checkLimits);
+
+/** A draft still being made: same rules, but the recipient may be blank. */
+export const storedDraftSchema = z
+  .object({ ...draftShape, recipientName: z.string().max(LIMITS.recipientLength) })
+  .superRefine(checkLimits);
 
 /** Body of POST /api/letters: the draft plus its resolved delivery time. */
 export const sendLetterSchema = letterDraftSchema.and(
