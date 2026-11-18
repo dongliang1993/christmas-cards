@@ -3,18 +3,12 @@
 import { useEffect, useImperativeHandle, useRef, type Ref } from "react";
 import * as THREE from "three";
 import { CARD_ASSETS } from "@/lib/cardAssets";
-import { CARD_H, CARD_THICKNESS, CARD_W, SHEET_H, SHEET_THICKNESS, SHEET_W } from "@/lib/cardConstants";
+import { CARD_H, CARD_THICKNESS, CARD_W } from "@/lib/cardConstants";
 import { createElementLayer, type ElementLayer, type LayerElement } from "@/lib/card/elementMeshes";
 import { localToPlacement, placementToLocal } from "@/lib/card/elementLayout";
 import { applyPaperStock, paperTintOf } from "@/lib/card/paperStocks";
 import type { Face, PaperStock } from "@/lib/letter/model";
-import {
-  applyBow,
-  BOW_AMP,
-  captureBendBuffers,
-  OPEN_MAX,
-  type BendBuffers,
-} from "@/lib/cardBend";
+import { applyBow, BOW_AMP, OPEN_MAX } from "@/lib/cardBend";
 import {
   coastOrbit,
   createPointerState,
@@ -27,53 +21,39 @@ import {
 import { createPostfxStack, type PostfxStack } from "@/lib/cardPostfx";
 import { LAYOUT_SPRING, stepHinge, stepSpring, type Spring } from "@/lib/cardMotion";
 import { createHandRig, type HandRig } from "@/lib/hand/handRig";
-import { createGlowSpriteTexture, GLOW_HDR, GLOW_SIZE } from "@/lib/cardGlow";
-import { createLampGate, type LampGate } from "@/lib/lampGate";
-import { createCardSnow } from "@/lib/cardSnow";
-import {
-  baseSurface,
-  cardBakes,
-  LAYER_BAKE_SCALE,
-  layerSurface,
-  loadCoverImage,
-  loadLayers,
-} from "@/lib/cardBakes";
+import { createGlowSpriteTexture } from "@/lib/cardGlow";
+import { createLampGate } from "@/lib/lampGate";
+import { loadCoverImage, loadLayers } from "@/lib/cardBakes";
 import { ensureSurfaces, prebakeAllCards } from "@/lib/ensureSurfaces";
-import { decodeImages, isPreflipped } from "@/lib/gpuImages";
 import { createLruCache, type LruCache } from "@/lib/lruCache";
-import { LIVE_SPECS, type LiveSpec } from "@/lib/live/liveSpec";
+import { createCardBody, COVER_PX_H, COVER_PX_W, type CardBody } from "@/lib/card/cardBody";
 import {
-  coverLocalToPx,
-  coverPxToLocal,
-  createLiveRuntime,
-  kickMovers,
-  packMoverUniforms,
-  resolveLiveTap,
-  stepLive,
-  type LiveRuntime,
-} from "@/lib/live/movers";
-import { installMoverShader, type MoverShaderHandle } from "@/lib/live/moverShader";
-import { buildPaperNormalTile, type CoverSurface, type SurfaceImage } from "@/lib/cardRelief";
+  buildFace,
+  buildInside,
+  disposeFace,
+  disposeInside,
+  faceUploads,
+  insideUploads,
+  makeTexture,
+  redrawSheet,
+  warmPieceMaterials,
+  type CardFace,
+  type CardInside,
+  type KitContext,
+} from "@/lib/card/cardKit";
+import { coverLocalToPx, coverPxToLocal, kickMovers, resolveLiveTap } from "@/lib/live/movers";
+import { buildPaperNormalTile } from "@/lib/cardRelief";
 import {
   addStudioEnvironment,
   addStudioLights,
   CARD_SHADOW_OFFSET,
   CARD_SHADOW_PAD_X,
-  CARD_SHADOW_PAD_Y,
   createCardShadowTexture,
   createStudioRenderer,
   SOFTBOX_POS,
 } from "@/lib/studio";
 import { fitStage, shadowFootprint, studioBackgroundColor, zoomedDistance, type StageFit } from "@/lib/cardStage";
-import {
-  createBackCanvas,
-  createBlankSheetCanvas,
-  createInsideLeftCanvas,
-  createInsideRightBaseCanvas,
-  createInsideRightSheetCanvas,
-  createSnowfallCanvas,
-  extractMotifCanvas,
-} from "@/lib/cardTextures";
+import { createSnowfallCanvas } from "@/lib/cardTextures";
 import type { CardTemplateId } from "@/lib/types";
 
 export interface ChristmasCard3DProps {
@@ -148,44 +128,6 @@ export interface CardHandle {
   projectFace(face: Face): { x: number; y: number }[] | null;
 }
 
-interface RuntimeLiftedMesh {
-  mesh: THREE.Mesh;
-  baseZ: number;
-  bob: number;
-  twinkle: boolean;
-  phase: number;
-  impulse: number;
-  texture: THREE.Texture;
-  material: THREE.MeshStandardMaterial;
-  geometry: THREE.PlaneGeometry;
-  /**
-   * "lifted": a cutout from the cover; its material goes back to the pool.
-   * "layer": a paper-cut piece with its own image, relief and backing; disposed.
-   */
-  kind: "lifted" | "layer";
-  /** Anything else the piece owns (relief maps, its backing's material). */
-  owned: Array<{ dispose(): void }>;
-  /** Its unbent vertices: it bows with the cover each frame, so the cover never cuts through it. */
-  bend: BendBuffers;
-}
-
-/** Strips across a raised piece, so it can follow the cover's bow. */
-const LIFT_SEGMENTS = 16;
-
-/**
- * A raised piece's quad in the cover box's own frame (x -W/2..W/2 from the
- * spine, z from the box centre), centred at card-pivot (cx, cy), `lift` above
- * the cover's face: the frame applyBow bends, so the piece bends with it.
- */
-function liftedGeometry(w: number, h: number, cx: number, cy: number, lift: number): THREE.PlaneGeometry {
-  const geo = new THREE.PlaneGeometry(w, h, LIFT_SEGMENTS, 1);
-  geo.translate(cx - CARD_W / 2, cy, CARD_THICKNESS / 2 + lift);
-  return geo;
-}
-
-/** A paper-cut piece's backing: a shade darker, a hair behind, so a tilt shows the cut edge. */
-const LAYER_BACKING_DEPTH = 0.0028;
-const LAYER_BACKING_TONE = new THREE.Color(0.74, 0.7, 0.64);
 
 /** How far the pointer slides the studio softbox (SOFTBOX_POS in lib/studio). */
 const SOFTBOX_SWAY = 1.4;
@@ -199,9 +141,6 @@ function motionScale(): number {
 }
 
 /** Shadow plane is the card footprint padded by this much on each axis. */
-/** Cover artwork size in pixels; living-card positions are in these. */
-const COVER_PX_W = 940;
-const COVER_PX_H = 1316;
 /** Pointer speed (px/s) that blows a full breeze through the card. */
 const WIND_FULL_PX_S = 1400;
 /**
@@ -235,403 +174,21 @@ function createParticleSprite(): THREE.CanvasTexture {
   return tex;
 }
 
-function makeTexture(
-  source: SurfaceImage,
-  anisotropy: number,
-  isColor = true,
-): THREE.Texture {
-  // Every SurfaceImage is a valid texture source at runtime (canvas, image,
-  // ImageBitmap); three's own typings are narrower than the WebGL reality.
-  const tex = new THREE.Texture(source as HTMLCanvasElement);
-  // A decoded bitmap carries its flip already (see lib/gpuImages).
-  if (isPreflipped(source)) tex.flipY = false;
-  if (isColor) {
-    tex.colorSpace = THREE.SRGBColorSpace;
-  }
-  tex.anisotropy = anisotropy;
-  tex.needsUpdate = true;
-  return tex;
-}
+/** Faces kept on the GPU: the real cards in the hand plus a couple more. */
+const FACE_CACHE_SIZE = 5;
+/** Insides kept: the card in front and the one before. */
+const INSIDE_CACHE_SIZE = 2;
 
-/** A baked relief's two images. */
-function surfaceImages(s: CoverSurface): SurfaceImage[] {
-  return [s.normal, s.surface];
-}
-
-type TextureSlot = "map" | "normalMap" | "roughnessMap" | "metalnessMap" | "alphaMap";
-const TEXTURE_SLOTS: readonly TextureSlot[] = ["map", "normalMap", "roughnessMap", "metalnessMap", "alphaMap"];
-
-/** The textures a material samples (or the texture itself). */
-function materialTextures(o: unknown): THREE.Texture[] {
-  if (o instanceof THREE.Texture) return [o];
-  if (!(o instanceof THREE.Material)) return [];
-  const slots = o as Partial<Record<TextureSlot, THREE.Texture | null>>;
-  return TEXTURE_SLOTS.map((k) => slots[k]).filter((t): t is THREE.Texture => t instanceof THREE.Texture);
-}
-
-/** A baked relief, uploaded: a normal map and a metalness/roughness map. */
-interface SurfaceTextures {
-  normal: THREE.Texture;
-  surface: THREE.Texture;
-}
-
-function surfaceTextures(baked: CoverSurface, anisotropy: number): SurfaceTextures {
-  return {
-    normal: makeTexture(baked.normal, anisotropy, false),
-    surface: makeTexture(baked.surface, anisotropy, false),
+/** 1x1 textures for a template card's inside map slots until its inside arrives. */
+function createPlaceholders() {
+  const px = (r: number, g: number, b: number, srgb: boolean) => {
+    const t = new THREE.DataTexture(new Uint8Array([r, g, b, 255]), 1, 1);
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+    t.needsUpdate = true;
+    return t;
   };
-}
-
-/** Put a relief on a paper material (paint relief + gloss). */
-function putSurface(mat: THREE.MeshStandardMaterial, s: SurfaceTextures): void {
-  mat.normalMap = s.normal;
-  mat.normalScale.set(1, 1);
-  mat.roughnessMap = s.surface;
-  mat.metalnessMap = s.surface;
-  mat.roughness = 1;
-  mat.metalness = 1;
-}
-
-/** How many cards keep their textures on the GPU (the one shown plus the last two). */
-const KIT_CACHE_SIZE = 3;
-
-/**
- * Everything one card puts on the shared card meshes. Kept per card (LRU), so
- * switching back to a card only reassigns what is already on the GPU, as the
- * reference does by keeping every card built and toggling visibility.
- */
-interface CardKit {
-  templateId: CardTemplateId;
-  coverImg: HTMLImageElement;
-  coverMap: THREE.Texture;
-  coverRelief: SurfaceTextures;
-  snowMask: THREE.Texture;
-  leftMap: THREE.Texture;
-  rightBaseMap: THREE.Texture;
-  backMap: THREE.Texture;
-  /** The insert sheet carries the message, so it remembers which text it shows. */
-  sheet: { map: THREE.Texture; text: string };
-  /** Template stickers' relief on the inside pages; bare pages have none. */
-  leftRelief: SurfaceTextures | null;
-  sheetRelief: SurfaceTextures | null;
-  lifted: RuntimeLiftedMesh[];
-}
-
-function sheetText(message: string, signature: string): string {
-  return `${message}\u0000${signature}`;
-}
-
-/** The kit's own textures (the raised pieces' live on their materials). */
-function kitTextures(kit: CardKit): THREE.Texture[] {
-  return [
-    kit.coverMap,
-    kit.coverRelief.normal,
-    kit.coverRelief.surface,
-    kit.snowMask,
-    kit.leftMap,
-    kit.rightBaseMap,
-    kit.backMap,
-    kit.sheet.map,
-    ...[kit.leftRelief, kit.sheetRelief].flatMap((s) => (s ? [s.normal, s.surface] : [])),
-  ];
-}
-
-/** Free an evicted card. Cutout materials go back to the pool (no recompile). */
-function disposeKit(kit: CardKit, liftedMatPool: THREE.MeshStandardMaterial[]): void {
-  for (const tex of kitTextures(kit)) tex.dispose();
-  for (const lm of kit.lifted) {
-    lm.mesh.removeFromParent();
-    lm.geometry.dispose();
-    lm.texture.dispose();
-    for (const o of lm.owned) o.dispose();
-    if (lm.kind === "lifted") liftedMatPool.push(lm.material);
-    else lm.material.dispose();
-  }
-}
-
-type LayeredCover = Awaited<ReturnType<typeof loadLayers>>;
-
-/** What a card's kit is built from. */
-interface KitSources {
-  templateId: CardTemplateId;
-  coverImg: HTMLImageElement;
-  layered: LayeredCover;
-  /** Editor/letter pages: no template stickers or text, they come as meshes. */
-  bare: boolean;
-  message: string;
-  signature: string;
-}
-
-function cardKitKey(templateId: CardTemplateId, bare: boolean): string {
-  return `${templateId}|${bare ? "bare" : "template"}`;
-}
-
-/**
- * Build one card's kit: textures, raised pieces and their materials. Every
- * <img> is decoded off the main thread first (see lib/gpuImages). Resolves
- * null when `isCancelled` turns true while decoding. Puts nothing on the meshes.
- */
-async function buildKit(h: SceneHandles, src: KitSources, isCancelled: () => boolean): Promise<CardKit | null> {
-  const { templateId, coverImg, layered, bare } = src;
-  const spec = CARD_ASSETS[templateId];
-  const bakes = cardBakes(templateId, coverImg);
-  const baked = layered ? baseSurface(templateId, layered.base) : bakes.cover;
-  const pieceReliefs = (layered?.items ?? []).map(({ spec: it, img }) =>
-    layerSurface(it.src, img, it.box[2] * LAYER_BAKE_SCALE),
-  );
-  const decoded = await decodeImages([
-    layered ? layered.base : coverImg,
-    ...surfaceImages(baked),
-    bakes.snowMask,
-    ...surfaceImages(bakes.leftStickers),
-    ...surfaceImages(bakes.sheetStickers),
-    ...(layered?.items ?? []).map(({ img }) => img),
-    ...pieceReliefs.flatMap(surfaceImages),
-  ]);
-  if (isCancelled()) return null;
-  const up = <S,>(s: S): S => (decoded.get(s as object) as S | undefined) ?? s;
-  const upSurface = (s: CoverSurface): CoverSurface => ({ normal: up(s.normal), surface: up(s.surface) });
-  const aniso = h.maxAnisotropy;
-
-  return {
-    templateId,
-    coverImg,
-    // A paper-cut cover shows its bare base; its pieces are raised separately.
-    coverMap: makeTexture(up(layered ? layered.base : coverImg), aniso),
-    coverRelief: surfaceTextures(upSurface(baked), aniso),
-    // Snow only behind the window glass (bubbbly's snowfall()).
-    snowMask: makeTexture(up(bakes.snowMask), aniso, false),
-    leftMap: makeTexture(
-      bare ? createInsideLeftCanvas(templateId, null, []) : createInsideLeftCanvas(templateId, coverImg, spec.motifs.left),
-      aniso,
-    ),
-    rightBaseMap: makeTexture(createInsideRightBaseCanvas(templateId), aniso),
-    backMap: makeTexture(createBackCanvas(templateId, coverImg, spec.motifs.back), aniso),
-    sheet: bare
-      ? { map: makeTexture(createBlankSheetCanvas(templateId), aniso), text: "" }
-      : {
-          map: makeTexture(
-            createInsideRightSheetCanvas(templateId, src.message, src.signature, coverImg, spec.motifs.insert),
-            aniso,
-          ),
-          text: sheetText(src.message, src.signature),
-        },
-    // Template stickers get the same paint relief + gloss as the cover, so the
-    // pointer lamp glints on them once the card is open. Text stays flat ink.
-    leftRelief: bare ? null : surfaceTextures(upSurface(bakes.leftStickers), aniso),
-    sheetRelief: bare ? null : surfaceTextures(upSurface(bakes.sheetStickers), aniso),
-    lifted: [
-      ...buildCutouts(h, templateId, coverImg),
-      ...buildPaperCutPieces(h, templateId, layered, pieceReliefs.map(upSurface), up),
-    ],
-  };
-}
-
-/** Raised 3D cutouts cropped from the cover art. Materials come from the pool. */
-function buildCutouts(h: SceneHandles, templateId: CardTemplateId, coverImg: HTMLImageElement): RuntimeLiftedMesh[] {
-  const spec = CARD_ASSETS[templateId];
-  return spec.lifted.map((l, idx) => {
-    const tex = makeTexture(extractMotifCanvas(coverImg, l.box), h.maxAnisotropy);
-    const geo = liftedGeometry(
-      (l.box[2] / spec.w) * CARD_W,
-      (l.box[3] / spec.h) * CARD_H,
-      ((l.box[0] + l.box[2] / 2) / spec.w) * CARD_W,
-      (0.5 - (l.box[1] + l.box[3] / 2) / spec.h) * CARD_H,
-      l.lift,
-    );
-    const mat = h.liftedMatPool.pop() ?? newCutoutMaterial(h);
-    // Same features every time (a map, a normal map): no recompile.
-    mat.map = tex;
-    mat.emissive.setHex(l.twinkle ? 0xffe4a0 : 0x000000);
-    mat.emissiveIntensity = 0;
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.castShadow = true;
-    return {
-      mesh,
-      baseZ: l.lift,
-      bob: l.bob,
-      twinkle: Boolean(l.twinkle),
-      phase: idx * 1.7,
-      impulse: 0,
-      texture: tex,
-      material: mat,
-      geometry: geo,
-      kind: "lifted" as const,
-      owned: [],
-      bend: captureBendBuffers(geo),
-    };
-  });
-}
-
-function newCutoutMaterial(h: SceneHandles): THREE.MeshStandardMaterial {
-  const m = new THREE.MeshStandardMaterial({
-    transparent: true,
-    alphaTest: 0.08,
-    roughness: 0.8,
-    normalMap: h.paperNormalTex,
-    normalScale: new THREE.Vector2(0.8, 0.8),
-    emissiveIntensity: 0,
-  });
-  // A raised piece: the pointer lamp always plays on it.
-  h.lampGate.install(m, 1);
-  return m;
-}
-
-/** A paper-cut piece's face: its own relief and gold foil. */
-function newPieceMaterial(lampGate: LampGate, map: THREE.Texture, relief: SurfaceTextures): THREE.MeshStandardMaterial {
-  const mat = new THREE.MeshStandardMaterial({
-    map,
-    normalMap: relief.normal,
-    metalnessMap: relief.surface,
-    roughnessMap: relief.surface,
-    metalness: 1,
-    roughness: 1,
-    // Opaque with a cutout: no transparent sorting against the snow to flip mid-swing.
-    alphaTest: 0.5,
-  });
-  lampGate.install(mat, 1); // a raised paper piece: the lamp plays on it
-  return mat;
-}
-
-/** A paper-cut piece's cut edge: plain paper behind it. */
-function newBackingMaterial(lampGate: LampGate, map: THREE.Texture): THREE.MeshStandardMaterial {
-  const mat = new THREE.MeshStandardMaterial({ map, color: LAYER_BACKING_TONE, roughness: 0.9, alphaTest: 0.5 });
-  lampGate.install(mat); // the cut edge is paper
-  return mat;
-}
-
-/** A piece with its backing just behind it, both casting shadows. */
-function pieceMesh(geo: THREE.BufferGeometry, mat: THREE.Material, backingMat: THREE.Material): THREE.Mesh {
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  const backing = new THREE.Mesh(geo, backingMat);
-  backing.position.z = -LAYER_BACKING_DEPTH;
-  backing.castShadow = true;
-  mesh.add(backing);
-  return mesh;
-}
-
-/**
- * A program's first draw is costly on its own (three reads the link log and
- * the uniforms; ~100 ms on macOS), and compileAsync doesn't cover it. Paper-cut
- * pieces are the only materials no card had drawn before, so the first such
- * card stalled as it landed. Draw them once while the page is still loading,
- * from a speck at the card's centre, and keep the materials so their programs
- * stay cached. Returns a dispose for unmount.
- */
-function warmPieceMaterials(parent: THREE.Object3D, lampGate: LampGate, tex: THREE.Texture): () => void {
-  const pieceMat = newPieceMaterial(lampGate, tex, { normal: tex, surface: tex });
-  const backingMat = newBackingMaterial(lampGate, tex);
-  const geo = new THREE.PlaneGeometry(1e-4, 1e-4);
-  const speck = pieceMesh(geo, pieceMat, backingMat);
-  parent.add(speck);
-  // A few frames is plenty for one draw (and one shadow pass).
-  let frames = WARM_FRAMES;
-  let raf = 0;
-  const tick = () => {
-    frames -= 1;
-    if (frames > 0) raf = requestAnimationFrame(tick);
-    else speck.removeFromParent();
-  };
-  raf = requestAnimationFrame(tick);
-  return () => {
-    cancelAnimationFrame(raf);
-    speck.removeFromParent();
-    geo.dispose();
-    pieceMat.dispose();
-    backingMat.dispose();
-  };
-}
-
-const WARM_FRAMES = 4;
-
-/** Paper-cut pieces: each its own image, relief and gold foil, raised to its own height. */
-function buildPaperCutPieces(
-  h: SceneHandles,
-  templateId: CardTemplateId,
-  layered: LayeredCover,
-  reliefs: CoverSurface[],
-  up: <S>(s: S) => S,
-): RuntimeLiftedMesh[] {
-  const spec = CARD_ASSETS[templateId];
-  return (layered?.items ?? []).map(({ spec: it, img }, idx) => {
-    const [bx, by, bw] = it.box;
-    const bh = (bw * img.height) / img.width;
-    const geo = liftedGeometry(
-      (bw / spec.w) * CARD_W,
-      (bh / spec.h) * CARD_H,
-      ((bx + bw / 2) / spec.w) * CARD_W,
-      (0.5 - (by + bh / 2) / spec.h) * CARD_H,
-      it.lift,
-    );
-    const map = makeTexture(up(img), h.maxAnisotropy);
-    const relief = surfaceTextures(reliefs[idx], h.maxAnisotropy);
-    const mat = newPieceMaterial(h.lampGate, map, relief);
-    const backingMat = newBackingMaterial(h.lampGate, map);
-    const mesh = pieceMesh(geo, mat, backingMat);
-    return {
-      mesh,
-      baseZ: it.lift,
-      bob: it.bob ?? 0,
-      twinkle: false,
-      phase: idx * 1.3,
-      impulse: 0,
-      texture: map,
-      material: mat,
-      geometry: geo,
-      kind: "layer" as const,
-      owned: [relief.normal, relief.surface, backingMat],
-      bend: captureBendBuffers(geo),
-    };
-  });
-}
-
-/** Every texture a kit samples, for uploading ahead of its first frame. */
-function kitUploads(kit: CardKit): THREE.Texture[] {
-  return [...kitTextures(kit), ...kit.lifted.flatMap((lm) => [lm.material, ...lm.owned]).flatMap(materialTextures)];
-}
-
-/** Put a kit on the card meshes. Nothing is created or freed: the old kit stays cached. */
-function applyKit(h: SceneHandles, kit: CardKit): void {
-  const cover = h.coverBaseMat;
-  cover.map = kit.coverMap;
-  putSurface(cover, kit.coverRelief);
-  h.foilTex = kit.coverRelief.surface;
-  h.snowfallMat.alphaMap = kit.snowMask;
-  h.insideLeftMat.map = kit.leftMap;
-  h.insideRightBaseMat.map = kit.rightBaseMap;
-  h.backMat.map = kit.backMap;
-  h.insideRightSheetMat.map = kit.sheet.map;
-  if (kit.leftRelief) putSurface(h.insideLeftMat, kit.leftRelief);
-  if (kit.sheetRelief) putSurface(h.insideRightSheetMat, kit.sheetRelief);
-  for (const mat of [cover, h.snowfallMat, h.insideLeftMat, h.insideRightBaseMat, h.backMat, h.insideRightSheetMat]) {
-    mat.needsUpdate = true;
-  }
-  for (const lm of h.liftedMeshes) lm.mesh.removeFromParent();
-  h.liftedMeshes = kit.lifted;
-  for (const lm of kit.lifted) h.liftedGroup.add(lm.mesh);
-  h.activeKit = kit;
-}
-
-/** Redraw the insert sheet when the message differs from what the kit shows. */
-function refreshSheet(h: SceneHandles, kit: CardKit, message: string, signature: string): void {
-  const text = sheetText(message, signature);
-  if (kit.sheet.text === text) return;
-  const old = kit.sheet.map;
-  const spec = CARD_ASSETS[kit.templateId];
-  kit.sheet = {
-    map: makeTexture(
-      createInsideRightSheetCanvas(kit.templateId, message, signature, kit.coverImg, spec.motifs.insert),
-      h.maxAnisotropy,
-    ),
-    text,
-  };
-  if (h.activeKit === kit) {
-    h.insideRightSheetMat.map = kit.sheet.map;
-    h.insideRightSheetMat.needsUpdate = true;
-  }
-  old.dispose();
+  // Paper white; a flat normal; roughness ~0.86 (G), no metal (B).
+  return { map: px(242, 236, 228, true), normal: px(128, 128, 255, false), surface: px(0, 220, 0, false) };
 }
 
 /** What the scene effect hands the card-switch effect. */
@@ -639,43 +196,52 @@ interface SceneHandles {
   /** Compile the scene's shaders off the main thread where the GPU driver allows. */
   prewarm: () => Promise<void>;
   /**
-   * Upload textures to the GPU now. The real card is culled until it lands,
-   * so otherwise every new texture uploads on that one frame (the hitch).
+   * Upload textures to the GPU now, one per frame. A body is culled until it
+   * shows, so otherwise every new texture uploads on the frame it appears.
    */
   upload: (textures: readonly THREE.Texture[], isCancelled: () => boolean) => Promise<void>;
-  /** Keeps the pointer lamp off bare paper (see lib/lampGate). */
-  lampGate: LampGate;
-  coverBaseMat: THREE.MeshStandardMaterial;
-  insideLeftMat: THREE.MeshStandardMaterial;
-  insideRightBaseMat: THREE.MeshStandardMaterial;
-  insideRightSheetMat: THREE.MeshStandardMaterial;
-  backMat: THREE.MeshStandardMaterial;
-  /** What raised pieces hang from: the cover itself, so they share its bow. */
-  liftedGroup: THREE.Object3D;
-  liftedMeshes: RuntimeLiftedMesh[];
-  /**
-   * Cutout materials kept between cards. Disposing them freed their shader
-   * programs, so every switch recompiled two programs mid fly-in (the
-   * stutter); reusing them only swaps the texture.
-   */
-  liftedMatPool: THREE.MeshStandardMaterial[];
-  /** Recently shown cards, still on the GPU (see CardKit). Keyed by cardKitKey. */
-  kits: LruCache<string, CardKit>;
-  /** The kit on the meshes now. */
-  activeKit: CardKit | null;
-  glowSprite: THREE.Sprite;
-  glowLight: THREE.PointLight;
-  paperNormalTex: THREE.Texture;
-  snowfallTex: THREE.Texture;
-  snowfallMat: THREE.MeshBasicMaterial;
-  snowfallMesh: THREE.Mesh;
-  coverMesh: THREE.Mesh;
-  coverBend: BendBuffers;
-  liftedBend: BendBuffers;
-  frontPivot: THREE.Group;
-  maxAnisotropy: number;
-  foilTex: THREE.Texture | null;
-  moverShader: MoverShaderHandle;
+  kitCtx: KitContext;
+  /** The real card (the one in front). */
+  body: CardBody;
+  /** Built faces and insides by card (see lib/card/cardKit). */
+  faces: LruCache<string, CardFace>;
+  insides: LruCache<string, CardInside>;
+}
+
+function insideKey(templateId: CardTemplateId, bare: boolean): string {
+  return `${templateId}|${bare ? "bare" : "template"}`;
+}
+
+
+/** A cache hit, or build it and cache it (a racing build of the same key wins; ours is freed). */
+async function cachedBuild<T>(
+  cache: LruCache<string, T>,
+  key: string,
+  build: () => Promise<T | null>,
+  dispose: (value: T) => void,
+): Promise<T | null> {
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const built = await build();
+  if (!built) return null;
+  const raced = cache.get(key);
+  if (raced) {
+    dispose(built);
+    return raced;
+  }
+  cache.set(key, built);
+  return built;
+}
+
+/** Redraw the insert sheet when the message differs from what it shows. */
+function refreshSheet(h: SceneHandles, inside: CardInside, message: string, signature: string): void {
+  const old = redrawSheet(inside, message, signature, h.kitCtx.maxAnisotropy);
+  if (!old) return;
+  if (h.body.inside === inside) {
+    h.body.mats.insideRightSheet.map = inside.sheet.map;
+    h.body.mats.insideRightSheet.needsUpdate = true;
+  }
+  old.dispose();
 }
 
 export function ChristmasCard3D({
@@ -740,7 +306,6 @@ export function ChristmasCard3D({
     // Without a fly-in the card is already there: say hello straight away.
     greetIn: flyIn ? -1 : GREET_DELAY,
   });
-  const liveRef = useRef<{ spec: LiveSpec; rt: LiveRuntime } | null>(null);
 
   const callbacksRef = useRef({ onToggleOpen, onOpenProgress, onReady, onFirstFrame });
   const coverOnRef = useRef(false);
@@ -902,177 +467,37 @@ export function ChristmasCard3D({
     /** The real card stands in front (vs. its stand-in, while the hand moves). */
     let realShown = !rig;
 
-    const outerGroup = new THREE.Group();
-    scene.add(outerGroup);
-
-    const cardCenterGroup = new THREE.Group();
-    outerGroup.add(cardCenterGroup);
-
-    const paperEdgeMat = new THREE.MeshPhysicalMaterial({
-      color: 0xe6ddd1,
-      roughness: 0.9,
-      metalness: 0.0,
-      normalMap: paperNormalTex,
-      normalScale: new THREE.Vector2(0.8, 0.8),
+    const shadowTex = createCardShadowTexture();
+    const placeholders = bareRef.current ? null : createPlaceholders();
+    const body = createCardBody({
+      paperNormalTex,
+      snowfallTex,
+      glowTex,
+      shadowTex,
+      lampGate,
+      placeholders,
     });
+    scene.add(body.outer);
+    const { outer: outerGroup, center: cardCenterGroup, frontPivot, coverMesh, rightMesh, sheetMesh } = body;
+    const { front: frontGeo, right: rightGeo, sheet: sheetGeo } = body.geos;
+    const { cover: coverBend, right: rightBend, sheet: sheetBend } = body.bends;
+    const {
+      edge: paperEdgeMat,
+      insideLeft: insideLeftMat,
+      insideRightBase: insideRightBaseMat,
+      insideRightSheet: insideRightSheetMat,
+    } = body.mats;
+    const shadowPlane = body.shadowPlane;
+    const shadowMat = shadowPlane.material;
 
-    const coverBaseMat = new THREE.MeshStandardMaterial({
-      roughness: 0.84,
-      metalness: 0.02,
-      normalMap: paperNormalTex,
-      normalScale: new THREE.Vector2(1, 1),
-    });
-    // #4 Foil defaults so swapping maps in the loader works cleanly.
-    coverBaseMat.metalness = 0.55;
-    coverBaseMat.roughness = 0.6;
-    // Living card: patches of the painting turn about their pivots.
-    const moverShader = installMoverShader(coverBaseMat, COVER_PX_W, COVER_PX_H);
-
-    const insideLeftMat = new THREE.MeshPhysicalMaterial({
-      roughness: 0.86,
-      metalness: 0.01,
-      normalMap: paperNormalTex,
-      normalScale: new THREE.Vector2(0.9, 0.9),
-    });
-    // #3 Inside shade base color; animated by open angle in the render loop.
-    insideLeftMat.color = new THREE.Color(0xffffff);
-
-    const insideRightBaseMat = new THREE.MeshPhysicalMaterial({
-      roughness: 0.86,
-      metalness: 0.01,
-      normalMap: paperNormalTex,
-      normalScale: new THREE.Vector2(0.9, 0.9),
-    });
-
-    const insideRightSheetMat = new THREE.MeshPhysicalMaterial({
-      roughness: 0.82,
-      metalness: 0.01,
-      normalMap: paperNormalTex,
-      normalScale: new THREE.Vector2(0.7, 0.7),
-    });
-
-    const backMat = new THREE.MeshStandardMaterial({
-      roughness: 0.88,
-      metalness: 0.01,
-      normalMap: paperNormalTex,
-      normalScale: new THREE.Vector2(0.9, 0.9),
-    });
-    for (const m of [paperEdgeMat, coverBaseMat, insideLeftMat, insideRightBaseMat, insideRightSheetMat, backMat]) {
-      lampGate.install(m);
-    }
-
-    // #1 Segmented panels so the CPU bow can curve them.
-    const BEND_SEGMENTS = 24;
-    const rightGeo = new THREE.BoxGeometry(
-      CARD_W,
-      CARD_H,
-      CARD_THICKNESS,
-      BEND_SEGMENTS,
-      1,
-      1,
-    );
-    const rightMesh = new THREE.Mesh(rightGeo, [
-      paperEdgeMat,
-      paperEdgeMat,
-      paperEdgeMat,
-      paperEdgeMat,
-      insideRightBaseMat,
-      backMat,
-    ]);
-    rightMesh.position.set(CARD_W / 2, 0, 0);
-    rightMesh.castShadow = true;
-    rightMesh.receiveShadow = true;
-    cardCenterGroup.add(rightMesh);
-    const rightBend = captureBendBuffers(rightGeo);
-
-    const sheetGeo = new THREE.BoxGeometry(SHEET_W, SHEET_H, SHEET_THICKNESS, BEND_SEGMENTS, 1, 1);
-    const sheetMesh = new THREE.Mesh(sheetGeo, [
-      paperEdgeMat,
-      paperEdgeMat,
-      paperEdgeMat,
-      paperEdgeMat,
-      insideRightSheetMat,
-      paperEdgeMat,
-    ]);
-    sheetMesh.position.set(CARD_W / 2, 0, CARD_THICKNESS * 0.5 + 0.005);
-    sheetMesh.castShadow = true;
-    sheetMesh.receiveShadow = true;
-    cardCenterGroup.add(sheetMesh);
-    const sheetBend = captureBendBuffers(sheetGeo);
-
-    const frontPivot = new THREE.Group();
-    frontPivot.position.set(0, 0, CARD_THICKNESS * 0.5 + 0.026);
-    cardCenterGroup.add(frontPivot);
-
-    const frontGeo = new THREE.BoxGeometry(
-      CARD_W,
-      CARD_H,
-      CARD_THICKNESS,
-      BEND_SEGMENTS,
-      1,
-      1,
-    );
-    const coverMesh = new THREE.Mesh(frontGeo, [
-      paperEdgeMat,
-      paperEdgeMat,
-      paperEdgeMat,
-      paperEdgeMat,
-      coverBaseMat,
-      insideLeftMat,
-    ]);
-    coverMesh.position.set(CARD_W / 2, 0, CARD_THICKNESS * 0.5);
-    coverMesh.castShadow = true;
-    coverMesh.receiveShadow = true;
-    frontPivot.add(coverMesh);
-    const coverBend = captureBendBuffers(frontGeo);
-
-    // Group for lifted relief cutouts from the cover artwork
-    // Raised pieces hang from the cover (geometry in its frame) and bow with it.
-    const liftedGroup: THREE.Object3D = coverMesh;
-
-    // #5 Snowfall parallax layer above the cover artwork.
-    const snowfallMat = new THREE.MeshBasicMaterial({
-      map: snowfallTex,
-      transparent: true,
-      opacity: 0.9,
-      depthWrite: false,
-    });
-    const snowfallMesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(CARD_W, CARD_H),
-      snowfallMat,
-    );
-    snowfallMesh.position.set(CARD_W / 2, 0, CARD_THICKNESS + 0.003);
-    frontPivot.add(snowfallMesh);
-
-    // Animated warm glow sprite + PointLight
-    const glowSpriteMat = new THREE.SpriteMaterial({
-      map: glowTex,
-      color: 0xffb854,
-      transparent: true,
-      opacity: 0.72,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    });
-    const glowSprite = new THREE.Sprite(glowSpriteMat);
-    glowSprite.position.set(CARD_W / 2 - 0.35, -0.62, CARD_THICKNESS + 0.04);
-    frontPivot.add(glowSprite);
-
-    // Short reach: the candle warms its corner of the sill, not the whole card.
-    const glowLight = new THREE.PointLight(0xffb854, 0.75, 1.3);
-    glowLight.position.set(CARD_W / 2 - 0.35, -0.62, CARD_THICKNESS + 0.35);
-    frontPivot.add(glowLight);
-
-    // #2b Pointer lamp: the light that follows the pointer across the card,
+    // Pointer lamp: the light that follows the pointer across the card,
     // so the impasto relief & paper grain catch a moving sheen (bubbbly uLamp).
     // Physically decayed and held off the face; lights stickers inside too.
     const hoverLamp = new THREE.PointLight(0xfffaf4, 0, 4.2, 2);
     hoverLamp.position.set(CARD_W / 2, 0, 1.15);
     cardCenterGroup.add(hoverLamp);
 
-    // Snowfall strictly inside the cover artwork's snowArea: real flakes, blown by the pointer.
     const particleTex = createParticleSprite();
-    const snow = createCardSnow({ count: 40, size: 0.15, z: CARD_THICKNESS + 0.04 });
-    frontPivot.add(snow.points);
 
     paperMatsRef.current = [paperEdgeMat, insideLeftMat, insideRightBaseMat, insideRightSheetMat];
 
@@ -1085,6 +510,7 @@ export function ChristmasCard3D({
     );
 
     const liftedMatPool: THREE.MeshStandardMaterial[] = [];
+    const kitCtx: KitContext = { maxAnisotropy, lampGate, paperNormalTex, liftedMatPool };
     const unwarmPieces = warmPieceMaterials(scene, lampGate, paperNormalTex);
     const uploaded = new WeakSet<THREE.Texture>();
     sceneHandlesRef.current = {
@@ -1101,49 +527,11 @@ export function ChristmasCard3D({
           uploaded.add(tex);
         }
       },
-      lampGate,
-      coverBaseMat,
-      insideLeftMat,
-      insideRightBaseMat,
-      insideRightSheetMat,
-      backMat,
-      liftedGroup,
-      liftedMeshes: [],
-      liftedMatPool,
-      kits: createLruCache<string, CardKit>(KIT_CACHE_SIZE, (_key, kit) => disposeKit(kit, liftedMatPool)),
-      activeKit: null,
-      glowSprite,
-      glowLight,
-      paperNormalTex,
-      snowfallTex,
-      snowfallMat,
-      snowfallMesh,
-      coverMesh,
-      coverBend,
-      liftedBend: sheetBend,
-      frontPivot,
-      maxAnisotropy,
-      foilTex: null,
-      moverShader,
+      kitCtx,
+      body,
+      faces: createLruCache<string, CardFace>(FACE_CACHE_SIZE, (_key, face) => disposeFace(face, liftedMatPool)),
+      insides: createLruCache<string, CardInside>(INSIDE_CACHE_SIZE, (_key, inside) => disposeInside(inside)),
     };
-    // Keep rightBend / sheetBend reachable for the animation loop.
-    const bendRefs = { right: rightBend, sheet: sheetBend, cover: coverBend };
-    void bendRefs;
-
-    const shadowTex = createCardShadowTexture();
-    const shadowMat = new THREE.MeshBasicMaterial({
-      map: shadowTex,
-      transparent: true,
-      depthWrite: false,
-      opacity: 0.85,
-    });
-    const shadowPlane = new THREE.Mesh(
-      new THREE.PlaneGeometry(CARD_W * CARD_SHADOW_PAD_X, CARD_H * CARD_SHADOW_PAD_Y),
-      shadowMat,
-    );
-    // Just behind the card, as if it stood a finger's width off the sweep.
-    shadowPlane.position.set(CARD_SHADOW_OFFSET.x, CARD_SHADOW_OFFSET.y, CARD_SHADOW_OFFSET.z);
-    outerGroup.add(shadowPlane);
 
     // Card-open golden sparkle burst
     const burstCount = Math.max(24, Math.round(140 * motion));
@@ -1199,7 +587,7 @@ export function ChristmasCard3D({
 
     /** A tap on the closed cover: a light flares, a part reacts, or the card opens. */
     const handleCoverTap = (local: { x: number; y: number } | null): boolean => {
-      const live = liveRef.current;
+      const live = body.live;
       if (!local || !live || stateRef.current.openProgress > 0.1) return false;
       const px = coverLocalToPx(local, COVER_PX_W, COVER_PX_H);
       const hit = resolveLiveTap(live.spec, px.x, px.y);
@@ -1218,7 +606,7 @@ export function ChristmasCard3D({
         kickMovers(live.rt, hit.tap.kick ?? []);
         if (hit.tap.sparkle) burstAt(hit.tap.sparkle);
         if (hit.tap.lift) {
-          for (const lm of sceneHandlesRef.current?.liftedMeshes ?? []) lm.impulse = 1;
+          for (const lm of body.liftedMeshes) lm.impulse = 1;
         }
       }
       return true;
@@ -1520,6 +908,8 @@ export function ChristmasCard3D({
 
     let animId = 0;
     let elapsed = 0;
+    /** The pointer's sweep in card units/s: it blows the flakes and the far snow. */
+    let sweepWind = { x: 0, y: 0 };
     let lastTime = performance.now();
 
     const animate = (now: number) => {
@@ -1547,14 +937,10 @@ export function ChristmasCard3D({
       // Living card: the breeze dies away; parts sway, react and settle.
       s.wind *= Math.exp(-dt * 2.4);
       s.glowFlare = Math.max(0, s.glowFlare - dt * 1.4);
-      const live = liveRef.current;
-      if (live && !s.isPaused && s.openProgress < 0.95) {
-        if (s.greetIn > 0) {
-          s.greetIn -= dt;
-          if (s.greetIn <= 0) kickMovers(live.rt, live.spec.greet, 0.8);
-        }
-        stepLive(live.rt, dt * motion, s.wind);
-        sceneHandlesRef.current?.moverShader.writePose(live.rt);
+      const live = body.live;
+      if (live && !s.isPaused && s.openProgress < 0.95 && s.greetIn > 0) {
+        s.greetIn -= dt;
+        if (s.greetIn <= 0) kickMovers(live.rt, live.spec.greet, 0.8);
       }
       const ease = 1 - Math.pow(1 - s.flyProgress, 3);
 
@@ -1572,7 +958,7 @@ export function ChristmasCard3D({
         const viewH = container.clientHeight || window.innerHeight;
         const pxPerUnit = viewH / (2 * Math.tan(THREE.MathUtils.degToRad(CAMERA_FOV / 2)) * camera.position.z);
         const wind = { x: s.sweep.x / pxPerUnit, y: -s.sweep.y / pxPerUnit };
-        snow.update(dt, elapsed, s.snowBounds, wind, motion);
+        sweepWind = wind;
 
         // #5 snowfall parallax scroll
         snowfallTex.offset.y -= dt * 0.012 * motion;
@@ -1593,18 +979,17 @@ export function ChristmasCard3D({
       const bowMix = Math.sin(Math.min(Math.PI, openAngle / OPEN_MAX) * Math.PI);
       const bend = BOW_AMP * bowMix * motion;
       applyBow(frontGeo, CARD_W, bend, coverBend);
-      for (const lm of sceneHandlesRef.current?.liftedMeshes ?? []) applyBow(lm.geometry, CARD_W, bend, lm.bend);
+      for (const lm of body.liftedMeshes) applyBow(lm.geometry, CARD_W, bend, lm.bend);
       applyBow(rightGeo, CARD_W, bend * 0.35, rightBend);
       applyBow(sheetGeo, CARD_W, bend * 0.35, sheetBend);
       elementLayerRef.current?.applyBend({ "inside-left": bend, "inside-right": bend * 0.35 });
 
-      const handles = sceneHandlesRef.current;
-      if (handles) {
+      {
         // #3 Inside shade: cover shades the inside as it swings.
         const shade = 1 - 0.45 * Math.sin(Math.min(Math.PI, openAngle / OPEN_MAX) * Math.PI);
-        handles.insideLeftMat.color.copy(paperTintOf(handles.insideLeftMat)).multiplyScalar(shade);
-        handles.insideRightBaseMat.color
-          .copy(paperTintOf(handles.insideRightBaseMat))
+        insideLeftMat.color.copy(paperTintOf(insideLeftMat)).multiplyScalar(shade);
+        insideRightBaseMat.color
+          .copy(paperTintOf(insideRightBaseMat))
           .multiplyScalar(1 - 0.28 * (1 - shade));
 
         // #2 Key light follows pointer a little (studio softbox nudge).
@@ -1652,36 +1037,21 @@ export function ChristmasCard3D({
           1 - Math.exp(-dt * 8),
         );
 
-        // Lifted relief meshes bobbing & twinkling, with release impulse (#8).
-        let impulse = s.releasedImpulse;
+        // Lifted relief meshes bob & twinkle, with the release impulse (#8).
+        const impulse = s.releasedImpulse;
         s.releasedImpulse = Math.max(0, s.releasedImpulse - dt * 1.8);
-        for (const lm of handles.liftedMeshes) {
-          impulse = Math.max(impulse, 0);
-          lm.impulse = Math.max(lm.impulse, impulse * 0.6);
-          // Its lift lives in the geometry; this is only the bob on top.
-          lm.mesh.position.z =
-            Math.sin(elapsed * 2.1 * motion + lm.phase) * lm.bob +
-            Math.sin(elapsed * 18 * motion + lm.phase) * lm.impulse * 0.012;
-          if (lm.twinkle) {
-            lm.material.emissiveIntensity =
-              0.25 +
-              0.35 * Math.sin(elapsed * 3.4 * motion + lm.phase) +
-              lm.impulse * 1.4;
-          }
-        }
+        body.ambient({
+          dt,
+          elapsed,
+          motion,
+          paused: s.isPaused,
+          openProgress: s.openProgress,
+          glowFlare: s.glowFlare,
+          wind: s.wind,
+          sweep: sweepWind,
+          impulse,
+        });
       }
-
-      const flicker = s.glowFlicker
-        ? 1 + Math.sin(elapsed * 5.2) * 0.09 + Math.sin(elapsed * 11.7) * 0.05
-        : 1 + Math.sin(elapsed * 1.8) * 0.08;
-      const openFade = 1 - Math.min(1, s.openProgress * 1.4);
-      const flare = 1 + 1.6 * s.glowFlare * s.glowFlare;
-      glowLight.intensity = 0.85 * flicker * flare * (0.15 + 0.85 * openFade);
-      glowSprite.visible = s.openProgress < 0.7;
-      glowSpriteMat.opacity = Math.min(1, 0.65 * flicker * flare * (0.2 + 0.8 * openFade));
-      snow.points.visible = s.openProgress < 0.7;
-      snowfallMat.opacity = 0.9 * openFade;
-      snowfallMesh.visible = s.openProgress < 0.9;
 
       if (s.burstTimer > 0) {
         s.burstTimer = Math.max(0, s.burstTimer - dt);
@@ -1806,30 +1176,20 @@ export function ChristmasCard3D({
       rigRef.current = null;
       warmTarget.dispose();
       if (sceneHandlesRef.current) {
-        // Every card's textures and pieces live in its kit (cutouts return to the pool).
-        sceneHandlesRef.current.kits.clear();
-        unwarmPieces();
-        for (const mat of sceneHandlesRef.current.liftedMatPool) mat.dispose();
+        // Every card's textures and pieces live in its face/inside (cutouts return to the pool).
+        sceneHandlesRef.current.faces.clear();
+        sceneHandlesRef.current.insides.clear();
       }
-      rightGeo.dispose();
-      sheetGeo.dispose();
-      frontGeo.dispose();
-      shadowPlane.geometry.dispose();
-      snow.dispose();
+      unwarmPieces();
+      for (const mat of liftedMatPool) mat.dispose();
+      body.dispose();
+      if (placeholders) for (const t of Object.values(placeholders)) t.dispose();
       burstGeo.dispose();
       shadowTex.dispose();
       particleTex.dispose();
       glowTex.dispose();
       paperNormalTex.dispose();
-      shadowMat.dispose();
-      glowSpriteMat.dispose();
       burstMat.dispose();
-      paperEdgeMat.dispose();
-      coverBaseMat.dispose();
-      insideLeftMat.dispose();
-      insideRightBaseMat.dispose();
-      insideRightSheetMat.dispose();
-      backMat.dispose();
       renderer.dispose();
       if (domEl.parentNode === container) {
         container.removeChild(domEl);
@@ -1843,78 +1203,52 @@ export function ChristmasCard3D({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load cover.png -> derive oil-impasto normalMap, motifs, lifted cutouts & glow
+  // A new card: its face and inside (from the caches, or built, decoded and
+  // uploaded now), then on the real card, which flies in once they are on.
   useEffect(() => {
     const h = sceneHandlesRef.current;
     if (!h) return;
 
     let cancelled = false;
+    const isCancelled = () => cancelled;
     const spec = CARD_ASSETS[templateId];
+    const bare = bareRef.current;
     stateRef.current.assetsReady = false;
 
-    // Map pixel glow coordinates to card local space (X in [0..CARD_W], Y in [-CARD_H/2..CARD_H/2])
-    const gx = (spec.glow.at[0] / spec.w) * CARD_W;
-    const gy = (0.5 - spec.glow.at[1] / spec.h) * CARD_H;
-    h.glowSprite.position.set(gx, gy, CARD_THICKNESS + 0.04);
-    // A small HDR core: only the flame itself crosses the bloom threshold,
-    // so the light stays on the candle instead of hazing the whole card.
-    const glowSize = spec.glow.scale * GLOW_SIZE;
-    h.glowSprite.scale.set(glowSize, glowSize, 1);
-    h.glowSprite.material.color.setHex(spec.glow.color).multiplyScalar(GLOW_HDR);
-    h.glowLight.position.set(gx, gy, CARD_THICKNESS + 0.35);
-    h.glowLight.color.setHex(spec.glow.color);
-    stateRef.current.glowFlicker = spec.glow.flicker;
-
-    const liveSpec = LIVE_SPECS[templateId];
-    liveRef.current = { spec: liveSpec, rt: createLiveRuntime(liveSpec) };
-    h.moverShader.setMovers(packMoverUniforms(liveSpec));
-
-    // Map snowArea to card local space
-    const [sx, sy, sw, sh] = spec.snowArea;
-    stateRef.current.snowBounds = {
-      xMin: (sx / spec.w) * CARD_W,
-      xMax: ((sx + sw) / spec.w) * CARD_W,
-      yMax: (0.5 - sy / spec.h) * CARD_H,
-      yMin: (0.5 - (sy + sh) / spec.h) * CARD_H,
-    };
-
-    const bare = bareRef.current;
-    const key = cardKitKey(templateId, bare);
-    const isCancelled = () => cancelled;
-
-    /** This card's kit: from the cache, or built, cached and uploaded now. */
-    const kitReady = async (): Promise<CardKit | null> => {
-      const cached = h.kits.get(key);
-      if (cached) {
-        // Usually all on the GPU already; a switch cancelled mid-upload left the rest.
-        await h.upload(kitUploads(cached), isCancelled);
-        return cancelled ? null : cached;
-      }
+    const kitReady = async () => {
       const [coverImg, layered] = await Promise.all([
         loadCoverImage(spec.coverSrc),
         loadLayers(templateId),
         ensureSurfaces(templateId),
       ]);
       if (cancelled) return null;
-      const { message: msg, signature: sig } = textRef.current;
-      const built = await buildKit(h, { templateId, coverImg, layered, bare, message: msg, signature: sig }, isCancelled);
-      if (!built) return null;
-      // Cache it straight away, even if a newer switch cancels us, so nothing leaks.
-      const raced = h.kits.get(key);
-      if (raced) disposeKit(built, h.liftedMatPool);
-      else h.kits.set(key, built);
-      const kit = raced ?? built;
-      // Upload while the stand-in is still on show, not on the frame the card lands.
-      await h.upload(kitUploads(kit), isCancelled);
-      return cancelled ? null : kit;
+      const face = await cachedBuild(
+        h.faces,
+        templateId,
+        () => buildFace(h.kitCtx, { templateId, coverImg, layered }, isCancelled),
+        (f) => disposeFace(f, h.kitCtx.liftedMatPool),
+      );
+      if (!face) return null;
+      const inside = await cachedBuild(
+        h.insides,
+        insideKey(templateId, bare),
+        () => buildInside(h.kitCtx, { templateId, coverImg, bare, ...textRef.current }, isCancelled),
+        disposeInside,
+      );
+      if (!inside) return null;
+      // Upload while the card is still hidden, not on the frame it shows.
+      await h.upload([...faceUploads(face), ...insideUploads(inside)], isCancelled);
+      return cancelled ? null : { face, inside };
     };
 
     kitReady()
       .then(async (kit) => {
         if (cancelled || !kit) return;
-        applyKit(h, kit);
-        if (!bare) refreshSheet(h, kit, textRef.current.message, textRef.current.signature);
-        coverImageRef.current = kit.coverImg;
+        h.body.setCard(templateId);
+        h.body.applyFace(kit.face);
+        h.body.applyInside(kit.inside);
+        if (!bare) refreshSheet(h, kit.inside, textRef.current.message, textRef.current.signature);
+        coverImageRef.current = kit.face.coverImg;
         coverOnRef.current = true;
         // Compile the new material setup before the card flies, not on its first frame.
         await h.prewarm().catch(() => undefined);
@@ -1934,12 +1268,12 @@ export function ChristmasCard3D({
   }, [templateId]);
 
   // Redraw the insert sheet when the message or signature changes. On a card
-  // switch the switch itself does this, once the new card's kit is on.
+  // switch the switch itself does this, once the new card's inside is on.
   useEffect(() => {
     const h = sceneHandlesRef.current;
-    const kit = h?.activeKit;
-    if (!h || !kit || bareRef.current || kit.templateId !== templateId) return;
-    refreshSheet(h, kit, message, signature);
+    const inside = h?.body.inside;
+    if (!h || !inside || bareRef.current || inside.templateId !== templateId) return;
+    refreshSheet(h, inside, message, signature);
   }, [templateId, message, signature]);
 
   useEffect(() => {
