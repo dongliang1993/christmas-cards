@@ -1,4 +1,5 @@
 import { readPixels, toCanvas } from "@/lib/cardRelief";
+import type { CanvasLike } from "@/lib/canvasFactory";
 import { alphaMask, bakeSurfacePixels } from "@/lib/reliefCore";
 import { parseStickerManifest, type StickerEntry, type StickerManifest } from "./stickerManifest";
 
@@ -8,10 +9,10 @@ const BAKE_SIZE = 512;
 export interface StickerSurface {
   entry: StickerEntry;
   /** Colour, with the sticker's transparency. */
-  image: HTMLCanvasElement;
-  normal: HTMLCanvasElement;
+  image: CanvasLike;
+  normal: CanvasLike;
   /** G = roughness, B = metalness. */
-  surface: HTMLCanvasElement;
+  surface: CanvasLike;
   /** width / height of the opaque artwork's canvas. */
   aspect: number;
 }

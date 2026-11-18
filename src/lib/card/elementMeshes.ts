@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { applyBow, captureBendBuffers, type BendBuffers } from "@/lib/cardBend";
+import type { CanvasLike } from "@/lib/canvasFactory";
 import type { CardElement, Face } from "@/lib/letter/model";
 import { MATERIAL_PRESETS } from "@/lib/reliefCore";
 import { loadStickerManifest, loadStickerSurface } from "@/lib/stickers/stickerSurface";
@@ -72,8 +73,10 @@ function buildGeometry(e: LayerElement, widthFraction: number, aspect: number): 
   return geo;
 }
 
-function canvasTexture(canvas: HTMLCanvasElement, color: boolean, anisotropy: number): THREE.CanvasTexture {
-  const tex = new THREE.CanvasTexture(canvas);
+function canvasTexture(canvas: CanvasLike, color: boolean, anisotropy: number): THREE.CanvasTexture {
+  // CanvasLike is always a real canvas at runtime on this path (the sticker
+  // and text bakes run on the main thread).
+  const tex = new THREE.CanvasTexture(canvas as HTMLCanvasElement);
   if (color) tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = anisotropy;
   return tex;

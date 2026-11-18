@@ -288,6 +288,51 @@ export interface BakeOptions {
   mask?: Float32Array;
   /** Sticker material; only used together with `mask`. */
   material?: StickerMaterial;
+  /**
+   * Pick gold foil out by colour (warm yellow, saturated, not near-white) and
+   * make it metal. For artwork painted with real gold accents, such as the
+   * paper-cut cards; the default warm-highlight rule barely catches mid gold.
+   */
+  goldFoil?: boolean;
+  /**
+   * Strength of the cold-press paper tooth (1 = default). Raise it for art
+   * painted on smooth paper, so the sheet still reads as paper under the lamp.
+   */
+  tooth?: number;
+}
+
+const smooth = (a: number, b: number, x: number) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+
+/** Roughness of gold foil leaf. */
+const ROUGH_GOLD = 0.34;
+/**
+ * Metalness of gold foil. Short of 1 on purpose: full metal only mirrors the
+ * dark studio from the front and the gold reads brown; this keeps its colour.
+ */
+const METAL_GOLD = 0.7;
+
+/**
+ * 0..1: how much an sRGB pixel (0..255) reads as gold foil. Hue 30–55°
+ * (fading out by 22° / 62°), saturation from ~0.3 up, and not near-white:
+ * a warm window light is brighter and paler than foil.
+ */
+export function goldness(r: number, g: number, b: number): number {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  if (max === 0 || max === min) return 0;
+  const v = max / 255;
+  const sat = (max - min) / max;
+  let hue: number;
+  if (max === r) hue = (60 * ((g - b) / (max - min)) + 360) % 360;
+  else if (max === g) hue = 60 * ((b - r) / (max - min)) + 120;
+  else hue = 60 * ((r - g) / (max - min)) + 240;
+  const hueW = smooth(22, 30, hue) * (1 - smooth(55, 62, hue));
+  const satW = smooth(0.24, 0.34, sat);
+  const valW = smooth(0.38, 0.48, v) * (1 - smooth(0.94, 0.98, v));
+  return hueW * satW * valW;
 }
 
 export interface BakedPixels {
@@ -325,13 +370,21 @@ export function bakeSurfacePixels(px: Uint8ClampedArray, w: number, h: number, o
       const stroke = sampleBilinear(strokes, small.w, small.h, x / STROKE_DOWNSAMPLE, y / STROKE_DOWNSAMPLE) * strokeGain;
       const tooth = coldPress(x, y, 11);
       // A sticker carries no paper of its own: tooth only shows through its paint.
-      const toothWeight = isSticker ? 0.16 * m : 0.42 - 0.26 * m;
+      const toothWeight = (isSticker ? 0.16 * m : 0.42 - 0.26 * m) * (opts.tooth ?? 1);
       height[i] = plateau[i] * 1.7 + m * (stroke * 0.32 + lum[i] * 0.18) + tooth * toothWeight;
 
       const o = i * 4;
       let rough: number;
       let metal: number;
-      if (isSticker) {
+      if (opts.goldFoil) {
+        // Gold accents become foil wherever they sit; the rest keeps its own finish.
+        const gold = goldness(px[o], px[o + 1], px[o + 2]) * (isSticker ? m : 1);
+        const baseRough = isSticker
+          ? preset.roughness + (tooth - 0.5) * 0.06 * m
+          : ROUGH_PAPER + (ROUGH_PAINT - ROUGH_PAPER) * m + (tooth - 0.5) * 0.06;
+        metal = Math.max(isSticker ? preset.metalness * m : 0, gold * METAL_GOLD);
+        rough = baseRough + (ROUGH_GOLD - baseRough) * gold;
+      } else if (isSticker) {
         rough = preset.roughness + (tooth - 0.5) * 0.06 * m;
         metal = preset.metalness * m;
       } else {

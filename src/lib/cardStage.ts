@@ -74,6 +74,8 @@ export function fitStage(
   cardH: number,
   fovDeg: number,
   aspect: number,
+  /** Room to leave for a bottom dock. The editor has none, so it centres the card. */
+  dockReserve = DOCK_RESERVE,
 ): StageFit {
   const tanV = Math.tan(THREE.MathUtils.degToRad(fovDeg / 2));
   const tanH = tanV * aspect;
@@ -86,7 +88,7 @@ export function fitStage(
     distanceFor(cardW * 2, FIT_WIDTH_OPEN, tanH),
   );
   // Lift the card centre by half the dock reserve, at any camera distance.
-  const camYPerZ = -(DOCK_RESERVE / 2) * 2 * tanV;
+  const camYPerZ = -(dockReserve / 2) * 2 * tanV;
   return { closedZ, openZ, camYPerZ };
 }
 

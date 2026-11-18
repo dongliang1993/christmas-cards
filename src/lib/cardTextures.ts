@@ -1,4 +1,7 @@
 import type { MotifSpec } from "./cardAssets";
+import { createCanvas, type CanvasLike, type Ctx2d } from "./canvasFactory";
+import type { SurfaceSource } from "./cardRelief";
+import { loadedImage } from "./imageRegistry";
 import type { CardTemplateId } from "./types";
 import { TEMPLATE_MAP } from "./templates";
 
@@ -10,13 +13,11 @@ const TEX_H = 1316;
  * decorations share the exact same brushstroke & palette as the cover.
  */
 export function extractMotifCanvas(
-  coverImg: HTMLImageElement,
+  coverImg: SurfaceSource,
   from: [number, number, number, number],
-): HTMLCanvasElement {
+): CanvasLike {
   const [sx, sy, sw, sh] = from;
-  const canvas = document.createElement("canvas");
-  canvas.width = sw;
-  canvas.height = sh;
+  const canvas = createCanvas(sw, sh);
   const ctx = canvas.getContext("2d");
   if (!ctx) return canvas;
 
@@ -46,7 +47,7 @@ export function extractMotifCanvas(
 }
 
 function addPaperGrain(
-  ctx: CanvasRenderingContext2D,
+  ctx: Ctx2d,
   width: number,
   height: number,
   baseColor: string,
@@ -87,14 +88,24 @@ function addPaperGrain(
   }
 }
 
+/** What to draw for a motif: the element's own image, or a soft crop of the cover. */
+function motifSource(
+  coverImg: SurfaceSource | null | undefined,
+  m: MotifSpec,
+): SurfaceSource | null {
+  if (m.src) return loadedImage(m.src);
+  if (m.from && coverImg) return extractMotifCanvas(coverImg, m.from);
+  return null;
+}
+
 function drawLeftMotifs(
-  ctx: CanvasRenderingContext2D,
-  coverImg: HTMLImageElement | null | undefined,
+  ctx: Ctx2d,
+  coverImg: SurfaceSource | null | undefined,
   motifs: MotifSpec[],
 ): void {
-  if (!coverImg) return;
   for (const m of motifs) {
-    const crop = extractMotifCanvas(coverImg, m.from);
+    const crop = motifSource(coverImg, m);
+    if (!crop) continue;
     const dw = TEX_W * m.width;
     const dh = (crop.height / crop.width) * dw;
     ctx.save();
@@ -109,13 +120,11 @@ function drawLeftMotifs(
 
 export function createInsideLeftCanvas(
   templateId: CardTemplateId,
-  coverImg?: HTMLImageElement | null,
+  coverImg?: SurfaceSource | null,
   motifs: MotifSpec[] = [],
   reliefOnly = false,
-): HTMLCanvasElement {
-  const canvas = document.createElement("canvas");
-  canvas.width = TEX_W;
-  canvas.height = TEX_H;
+): CanvasLike {
+  const canvas = createCanvas(TEX_W, TEX_H);
   const ctx = canvas.getContext("2d");
   if (!ctx) return canvas;
 
@@ -146,7 +155,7 @@ export function createInsideLeftCanvas(
 }
 
 function wrapTextLines(
-  ctx: CanvasRenderingContext2D,
+  ctx: Ctx2d,
   text: string,
   maxWidth: number,
 ): string[] {
@@ -184,10 +193,8 @@ function wrapTextLines(
 
 export function createInsideRightBaseCanvas(
   templateId: CardTemplateId,
-): HTMLCanvasElement {
-  const canvas = document.createElement("canvas");
-  canvas.width = TEX_W;
-  canvas.height = TEX_H;
+): CanvasLike {
+  const canvas = createCanvas(TEX_W, TEX_H);
   const ctx = canvas.getContext("2d");
   if (!ctx) return canvas;
 
@@ -204,12 +211,10 @@ export function createInsideRightBaseCanvas(
 }
 
 /** The insert sheet with nothing on it: the editor places text and stickers as meshes. */
-export function createBlankSheetCanvas(templateId: CardTemplateId): HTMLCanvasElement {
+export function createBlankSheetCanvas(templateId: CardTemplateId): CanvasLike {
   const w = 780;
   const h = 1130;
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
+  const canvas = createCanvas(w, h);
   const ctx = canvas.getContext("2d");
   if (!ctx) return canvas;
   addPaperGrain(ctx, w, h, TEMPLATE_MAP[templateId].insideTint);
@@ -223,15 +228,13 @@ export function createInsideRightSheetCanvas(
   templateId: CardTemplateId,
   message: string,
   signature: string,
-  coverImg?: HTMLImageElement | null,
+  coverImg?: SurfaceSource | null,
   insertMotifs: MotifSpec[] = [],
   reliefOnly = false,
-): HTMLCanvasElement {
+): CanvasLike {
   const w = 780;
   const h = 1130;
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
+  const canvas = createCanvas(w, h);
   const ctx = canvas.getContext("2d");
   if (!ctx) return canvas;
 
@@ -284,15 +287,15 @@ export function createInsideRightSheetCanvas(
 }
 
 function drawInsertMotifs(
-  ctx: CanvasRenderingContext2D,
+  ctx: Ctx2d,
   w: number,
   h: number,
-  coverImg: HTMLImageElement | null | undefined,
+  coverImg: SurfaceSource | null | undefined,
   motifs: MotifSpec[],
 ): void {
-  if (!coverImg) return;
   for (const m of motifs) {
-    const crop = extractMotifCanvas(coverImg, m.from);
+    const crop = motifSource(coverImg, m);
+    if (!crop) continue;
     const dw = w * m.width;
     const dh = (crop.height / crop.width) * dw;
     ctx.drawImage(crop, w * m.at[0] - dw / 2, h * m.at[1] - dh / 2, dw, dh);
@@ -301,27 +304,24 @@ function drawInsertMotifs(
 
 export function createBackCanvas(
   templateId: CardTemplateId,
-  coverImg?: HTMLImageElement | null,
+  coverImg?: SurfaceSource | null,
   backMotifs: MotifSpec[] = [],
-): HTMLCanvasElement {
-  const canvas = document.createElement("canvas");
-  canvas.width = TEX_W;
-  canvas.height = TEX_H;
+): CanvasLike {
+  const canvas = createCanvas(TEX_W, TEX_H);
   const ctx = canvas.getContext("2d");
   if (!ctx) return canvas;
 
   const tpl = TEMPLATE_MAP[templateId];
   addPaperGrain(ctx, TEX_W, TEX_H, tpl.paperTint);
 
-  if (coverImg) {
-    for (const m of backMotifs) {
-      const crop = extractMotifCanvas(coverImg, m.from);
-      const dw = TEX_W * m.width;
-      const dh = (crop.height / crop.width) * dw;
-      const cx = TEX_W * m.at[0];
-      const cy = TEX_H * m.at[1];
-      ctx.drawImage(crop, cx - dw / 2, cy - dh / 2, dw, dh);
-    }
+  for (const m of backMotifs) {
+    const crop = motifSource(coverImg, m);
+    if (!crop) continue;
+    const dw = TEX_W * m.width;
+    const dh = (crop.height / crop.width) * dw;
+    const cx = TEX_W * m.at[0];
+    const cy = TEX_H * m.at[1];
+    ctx.drawImage(crop, cx - dw / 2, cy - dh / 2, dw, dh);
   }
 
   ctx.fillStyle = "rgba(110, 96, 84, 0.55)";
@@ -341,10 +341,8 @@ export function createSnowfallCanvas(
   w = 470,
   h = 658,
   time = 0,
-): HTMLCanvasElement {
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
+): CanvasLike {
+  const canvas = createCanvas(w, h);
   const ctx = canvas.getContext("2d");
   if (!ctx) return canvas;
 
@@ -408,16 +406,14 @@ export function createSnowfallCanvas(
  * dark night-sky pixels of the artwork, never over curtains or paper.
  */
 export function createSnowMaskCanvas(
-  coverImg: HTMLImageElement,
+  coverImg: SurfaceSource,
   snowArea: readonly [number, number, number, number],
   coverW: number,
   coverH: number,
-): HTMLCanvasElement {
+): CanvasLike {
   const w = 470;
   const h = 658;
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
+  const canvas = createCanvas(w, h);
   const ctx = canvas.getContext("2d");
   if (!ctx) return canvas;
 
@@ -449,9 +445,7 @@ export function createSnowMaskCanvas(
   ctx.putImageData(img, 0, 0);
 
   // Feather the edge so flakes fade at the window frame instead of clipping.
-  const soft = document.createElement("canvas");
-  soft.width = w;
-  soft.height = h;
+  const soft = createCanvas(w, h);
   const sCtx = soft.getContext("2d");
   if (!sCtx) return canvas;
   sCtx.filter = "blur(1.5px)";
@@ -464,6 +458,6 @@ export function createSnowMaskCanvas(
  * so the component can advance it with a texture offset instead of
  * regenerating every frame.
  */
-export function createSnowfallTile(time = 0): HTMLCanvasElement {
+export function createSnowfallTile(time = 0): CanvasLike {
   return createSnowfallCanvas(470, 658, time);
 }

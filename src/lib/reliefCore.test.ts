@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alphaMask, bakeSurfacePixels, MATERIAL_PRESETS } from "./reliefCore";
+import { alphaMask, bakeSurfacePixels, goldness, MATERIAL_PRESETS } from "./reliefCore";
 import { parseStickerManifest } from "./stickers/stickerManifest";
 
 /** A w×h RGBA image: opaque red disc of radius r in the middle, clear elsewhere. */
@@ -78,5 +78,27 @@ describe("parseStickerManifest", () => {
 
   it("rejects a sticker without a source", () => {
     expect(() => parseStickerManifest({ ...good, stickers: [{ ...good.stickers[0], src: "" }] })).toThrow();
+  });
+});
+
+describe("goldness: gold foil picked out by colour", () => {
+  it("reads the paper-cut set's gold as foil", () => {
+    expect(goldness(201, 164, 92)).toBeGreaterThan(0.8); // #C9A45C
+    expect(goldness(237, 200, 135)).toBeGreaterThan(0.6); // a lit gold star
+  });
+  it("leaves cream paper, berries, pine and night sky alone", () => {
+    expect(goldness(243, 237, 227)).toBe(0); // cream paper
+    expect(goldness(200, 87, 74)).toBe(0); // berry red
+    expect(goldness(143, 165, 138)).toBe(0); // pine green
+    expect(goldness(62, 74, 102)).toBe(0); // night blue
+  });
+  it("keeps the near-white warm window light out of the foil", () => {
+    expect(goldness(249, 222, 141)).toBeLessThan(0.25);
+  });
+  it("only raises metalness when the bake asks for gold foil", () => {
+    const px = new Uint8ClampedArray([201, 164, 92, 255]);
+    const plain = bakeSurfacePixels(px, 1, 1, { mask: new Float32Array([1]) });
+    const gold = bakeSurfacePixels(px, 1, 1, { mask: new Float32Array([1]), goldFoil: true });
+    expect(gold.surface[2]).toBeGreaterThan(plain.surface[2] + 120);
   });
 });
