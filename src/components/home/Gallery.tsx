@@ -1,11 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
-import { BookOpen, BookOpenCheck, PenLine } from "lucide-react";
+import { BookOpen, BookOpenCheck } from "lucide-react";
 import { ChristmasCard3D } from "@/components/ChristmasCard3D";
 import { CARD_ASSETS } from "@/lib/cardAssets";
-import { editorHref } from "@/lib/editor/editorLinks";
 import { playSwipe } from "@/lib/sfx";
 import { CARD_TEMPLATES, TEMPLATE_MAP } from "@/lib/templates";
 import type { CardTemplateId } from "@/lib/types";
@@ -62,7 +60,10 @@ export function Gallery() {
   return (
     <main className="relative h-dvh w-screen overflow-hidden bg-[#fbfaf9] select-none">
       <header className="pointer-events-none absolute left-5 top-4 z-10">
-        <h1 className="font-semibold text-stone-900">圣诞信</h1>
+        <h1 className="text-[#fbfaf9]">
+          {/* Brand logo drawn as an image: cursive lettering with holly and snowflake accents. */}
+          <img src="/assets/brand/logo.png" alt="Christmas Cards" className="h-8 w-auto" />
+        </h1>
       </header>
 
       <ChristmasCard3D
@@ -108,12 +109,6 @@ export function Gallery() {
         >
           {open ? <BookOpenCheck className="h-5 w-5" /> : <BookOpen className="h-5 w-5" />}
         </button>
-        {/* <Link
-          href={editorHref(templateId)}
-          className="ml-1 flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg bg-stone-900 px-2.5 text-xs font-medium text-white hover:bg-stone-800"
-        >
-          <PenLine className="h-3.5 w-3.5" /> 制作贺卡
-        </Link> */}
       </nav>
     </main>
   );
