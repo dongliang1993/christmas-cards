@@ -60,9 +60,11 @@ export function Gallery() {
   return (
     <main className="relative h-dvh w-screen overflow-hidden bg-[#fbfaf9] select-none">
       <header className="pointer-events-none absolute left-5 top-4 z-10">
-        <h1 className="text-[#fbfaf9]">
+        <h1 className="flex items-center gap-2">
           {/* Brand mark: the little christmas-house gift box, cut out on transparent. */}
-          <img src="/assets/brand/mark.png" alt="Christmas Cards" className="h-10 w-auto" />
+          <img src="/assets/brand/mark.png" alt="" className="h-10 w-auto" />
+          {/* Cursive lettering with holly and snowflake accents. */}
+          <img src="/assets/brand/logo.png" alt="Christmas Cards" className="h-8 w-auto" />
         </h1>
       </header>
 
