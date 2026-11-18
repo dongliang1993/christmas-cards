@@ -114,6 +114,14 @@ def alpha_flood(rgb: np.ndarray) -> np.ndarray:
     seed[0, :] = seed[-1, :] = seed[:, 0] = seed[:, -1] = True
     background = reconstruct(seed, candidate)
 
+    # Also clear large enclosed backdrop holes (e.g. inside a ribbon loop),
+    # keeping tighter colour tolerance so painted grey details stay untouched.
+    hole_lo, hole_hi = np.percentile(ring_l, 1) - 8, np.percentile(ring_l, 99) + 8
+    hole_cand = (lum >= hole_lo) & (lum <= hole_hi) & (sat <= np.percentile(ring_s, 99) + 0.04) & ~background
+    hole_core = erode(hole_cand, max(SPECK_RADIUS + 3, min(rgb.shape[:2]) // 360))
+    if hole_core.any():
+        background |= reconstruct(hole_core, candidate & ~background)
+
     subject = ~background
     # Drop specks (painted dust, stray dots) but keep thin parts of the
     # main shape: erode to the solid core, then regrow inside the subject.
@@ -125,11 +133,15 @@ def alpha_flood(rgb: np.ndarray) -> np.ndarray:
     return np.clip(box_blur(subject, 2), 0, 1)
 
 
-def alpha_glow(rgb: np.ndarray) -> np.ndarray:
+def alpha_glow(rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     lum, _ = lightness_saturation(rgb)
     floor = np.percentile(border_ring(lum), 99) + 10
     t = np.clip((lum - floor) / max(1.0, 255 - floor), 0, 1)
-    return t * t * (3 - 2 * t)
+    alpha = t * t * (3 - 2 * t)
+    # Un-premultiply against black so glowing halos stay luminous on light paper.
+    safe_a = np.maximum(alpha[..., None], 1e-3)
+    unpremul = np.where(alpha[..., None] > 0.02, np.clip(rgb / safe_a, 0, 255), 0)
+    return unpremul, alpha
 
 
 def fit_square(rgba: np.ndarray) -> Image.Image:
@@ -153,7 +165,7 @@ def process(src: Path, mode: str) -> Image.Image:
     if rgba[..., 3].min() < 250:  # already truly transparent: keep it
         alpha = rgba[..., 3] / 255
     elif mode == "glow":
-        alpha = alpha_glow(rgb)
+        rgb, alpha = alpha_glow(rgb)
     else:
         alpha = alpha_flood(rgb)
     out = np.dstack([rgb, alpha * 255]).round().clip(0, 255).astype(np.uint8)
