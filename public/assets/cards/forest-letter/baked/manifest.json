@@ -1,0 +1,107 @@
+{
+  "version": 1,
+  "card": "forest-letter",
+  "entries": [
+    {
+      "key": "/assets/cards/forest-letter/cover.webp|1|2.2",
+      "name": "cover",
+      "normal": "cover-normal.webp",
+      "surface": "cover-surface.webp"
+    },
+    {
+      "key": "snow|forest-letter",
+      "name": "snow-mask",
+      "src": "snow-mask.webp"
+    },
+    {
+      "key": "left-stickers|forest-letter",
+      "name": "left",
+      "normal": "left-normal.webp",
+      "surface": "left-surface.webp"
+    },
+    {
+      "key": "sheet-stickers|forest-letter",
+      "name": "sheet",
+      "normal": "sheet-normal.webp",
+      "surface": "sheet-surface.webp"
+    },
+    {
+      "key": "base|forest-letter|1|2.2",
+      "name": "base",
+      "normal": "base-normal.webp",
+      "surface": "base-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/forest-letter/elements/branch-left.webp|360",
+      "name": "layer-branch-left",
+      "normal": "layer-branch-left-normal.webp",
+      "surface": "layer-branch-left-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/forest-letter/elements/branch-right.webp|324",
+      "name": "layer-branch-right",
+      "normal": "layer-branch-right-normal.webp",
+      "surface": "layer-branch-right-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/forest-letter/elements/star-gold.webp|81",
+      "name": "layer-star-left",
+      "normal": "layer-star-left-normal.webp",
+      "surface": "layer-star-left-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/forest-letter/elements/star-gold.webp|75",
+      "name": "layer-star-right",
+      "normal": "layer-star-right-normal.webp",
+      "surface": "layer-star-right-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/forest-letter/elements/crest.webp|264",
+      "name": "layer-crest",
+      "normal": "layer-crest-normal.webp",
+      "surface": "layer-crest-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/forest-letter/elements/star-gold.webp|66",
+      "name": "layer-crest-star-l",
+      "normal": "layer-crest-star-l-normal.webp",
+      "surface": "layer-crest-star-l-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/forest-letter/elements/fawn.webp|279",
+      "name": "layer-fawn",
+      "normal": "layer-fawn-normal.webp",
+      "surface": "layer-fawn-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/forest-letter/elements/robin.webp|243",
+      "name": "layer-robin",
+      "normal": "layer-robin-normal.webp",
+      "surface": "layer-robin-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/forest-letter/elements/lantern.webp|288",
+      "name": "layer-lantern",
+      "normal": "layer-lantern-normal.webp",
+      "surface": "layer-lantern-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/forest-letter/elements/envelope.webp|318",
+      "name": "layer-envelope",
+      "normal": "layer-envelope-normal.webp",
+      "surface": "layer-envelope-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/forest-letter/elements/pinecone-cluster.webp|228",
+      "name": "layer-pinecone-cluster",
+      "normal": "layer-pinecone-cluster-normal.webp",
+      "surface": "layer-pinecone-cluster-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/forest-letter/elements/ribbon.webp|876",
+      "name": "layer-ribbon",
+      "normal": "layer-ribbon-normal.webp",
+      "surface": "layer-ribbon-surface.webp"
+    }
+  ]
+}

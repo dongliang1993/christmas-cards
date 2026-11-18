@@ -1,0 +1,151 @@
+{
+  "base": "/assets/cards/forest-letter/cover-base.webp",
+  "cover": "/assets/cards/forest-letter/cover.webp",
+  "size": [
+    940,
+    1316
+  ],
+  "items": [
+    {
+      "id": "branch-left",
+      "src": "/assets/cards/forest-letter/elements/branch-left.webp",
+      "box": [
+        74,
+        112,
+        240
+      ],
+      "lift": 0.012
+    },
+    {
+      "id": "branch-right",
+      "src": "/assets/cards/forest-letter/elements/branch-right.webp",
+      "box": [
+        644,
+        472,
+        216
+      ],
+      "lift": 0.012
+    },
+    {
+      "id": "star-left",
+      "src": "/assets/cards/forest-letter/elements/star-gold.webp",
+      "box": [
+        94,
+        492,
+        54
+      ],
+      "lift": 0.012
+    },
+    {
+      "id": "star-right",
+      "src": "/assets/cards/forest-letter/elements/star-gold.webp",
+      "box": [
+        792,
+        298,
+        50
+      ],
+      "lift": 0.012
+    },
+    {
+      "id": "crest",
+      "src": "/assets/cards/forest-letter/elements/crest.webp",
+      "box": [
+        382,
+        986,
+        176
+      ],
+      "lift": 0.014
+    },
+    {
+      "id": "crest-star-l",
+      "src": "/assets/cards/forest-letter/elements/star-gold.webp",
+      "box": [
+        302,
+        1052,
+        44
+      ],
+      "lift": 0.01
+    },
+    {
+      "id": "crest-star-r",
+      "src": "/assets/cards/forest-letter/elements/star-gold.webp",
+      "box": [
+        594,
+        1052,
+        44
+      ],
+      "lift": 0.01
+    },
+    {
+      "id": "fawn",
+      "src": "/assets/cards/forest-letter/elements/fawn.webp",
+      "box": [
+        138,
+        604,
+        186
+      ],
+      "lift": 0.016
+    },
+    {
+      "id": "robin",
+      "src": "/assets/cards/forest-letter/elements/robin.webp",
+      "box": [
+        674,
+        346,
+        162
+      ],
+      "lift": 0.016
+    },
+    {
+      "id": "lantern",
+      "src": "/assets/cards/forest-letter/elements/lantern.webp",
+      "box": [
+        650,
+        68,
+        192
+      ],
+      "lift": 0.018,
+      "bob": 0.0015
+    },
+    {
+      "id": "envelope",
+      "src": "/assets/cards/forest-letter/elements/envelope.webp",
+      "box": [
+        596,
+        660,
+        212
+      ],
+      "lift": 0.018
+    },
+    {
+      "id": "pinecone-cluster",
+      "src": "/assets/cards/forest-letter/elements/pinecone-cluster.webp",
+      "box": [
+        74,
+        760,
+        152
+      ],
+      "lift": 0.022
+    },
+    {
+      "id": "ribbon",
+      "src": "/assets/cards/forest-letter/elements/ribbon.webp",
+      "box": [
+        178,
+        832,
+        584
+      ],
+      "lift": 0.028
+    }
+  ],
+  "motifs": [
+    {
+      "src": "/assets/cards/forest-letter/elements/crest.webp",
+      "px": 560
+    },
+    {
+      "src": "/assets/cards/forest-letter/elements/star-gold.webp",
+      "px": 320
+    }
+  ]
+}

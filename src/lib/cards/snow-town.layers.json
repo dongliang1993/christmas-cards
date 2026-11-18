@@ -1,0 +1,102 @@
+{
+  "base": "/assets/cards/snow-town/cover-base.webp",
+  "cover": "/assets/cards/snow-town/cover.webp",
+  "size": [940, 1316],
+  "items": [
+    {
+      "id": "bridge-snow",
+      "src": "/assets/cards/snow-town/elements/bridge-snow.webp",
+      "box": [66, 690, 808],
+      "lift": 0.014
+    },
+    {
+      "id": "snowman",
+      "src": "/assets/cards/snow-town/elements/snowman.webp",
+      "box": [150, 760, 200],
+      "lift": 0.018
+    },
+    {
+      "id": "streetlamp",
+      "src": "/assets/cards/snow-town/elements/streetlamp.webp",
+      "box": [640, 660, 150],
+      "lift": 0.018
+    },
+    {
+      "id": "wreath-left",
+      "src": "/assets/cards/snow-town/elements/wreath-left.webp",
+      "box": [108, 200, 330],
+      "lift": 0.022
+    },
+    {
+      "id": "wreath-right",
+      "src": "/assets/cards/snow-town/elements/wreath-right.webp",
+      "box": [502, 200, 330],
+      "lift": 0.022
+    },
+    {
+      "id": "cloud-pair",
+      "src": "/assets/cards/snow-town/elements/cloud-pair.webp",
+      "box": [96, 120, 230],
+      "lift": 0.024,
+      "bob": 0.0012
+    },
+    {
+      "id": "top-bow",
+      "src": "/assets/cards/snow-town/elements/top-bow.webp",
+      "box": [348, 84, 240],
+      "lift": 0.026
+    },
+    {
+      "id": "snowflake-small",
+      "src": "/assets/cards/snow-town/elements/snowflake-small.webp",
+      "box": [64, 330, 120],
+      "lift": 0.024,
+      "bob": 0.0012
+    },
+    {
+      "id": "snowflake-small-b",
+      "src": "/assets/cards/snow-town/elements/snowflake-small.webp",
+      "box": [760, 380, 100],
+      "lift": 0.024,
+      "bob": 0.0012
+    },
+    {
+      "id": "snowflake-small-c",
+      "src": "/assets/cards/snow-town/elements/snowflake-small.webp",
+      "box": [120, 500, 84],
+      "lift": 0.024,
+      "bob": 0.0012
+    },
+    {
+      "id": "snowflake-main",
+      "src": "/assets/cards/snow-town/elements/snowflake-main.webp",
+      "box": [400, 900, 140],
+      "lift": 0.026,
+      "bob": 0.0015
+    },
+    {
+      "id": "star-icicle",
+      "src": "/assets/cards/snow-town/elements/star-icicle.webp",
+      "box": [700, 130, 96],
+      "lift": 0.028,
+      "bob": 0.0015
+    },
+    {
+      "id": "star-icicle-b",
+      "src": "/assets/cards/snow-town/elements/star-icicle.webp",
+      "box": [144, 130, 96],
+      "lift": 0.028,
+      "bob": 0.0015
+    }
+  ],
+  "motifs": [
+    {
+      "src": "/assets/cards/snow-town/elements/snowflake-main.webp",
+      "px": 560
+    },
+    {
+      "src": "/assets/cards/snow-town/elements/star-icicle.webp",
+      "px": 320
+    }
+  ]
+}

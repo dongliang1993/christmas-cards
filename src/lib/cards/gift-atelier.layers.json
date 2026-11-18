@@ -1,0 +1,123 @@
+{
+  "base": "/assets/cards/gift-atelier/cover-base.webp",
+  "cover": "/assets/cards/gift-atelier/cover.webp",
+  "size": [
+    940,
+    1316
+  ],
+  "items": [
+    {
+      "id": "garland",
+      "src": "/assets/cards/gift-atelier/elements/garland.webp",
+      "box": [
+        150,
+        116,
+        640
+      ],
+      "lift": 0.014
+    },
+    {
+      "id": "ornament-pair",
+      "src": "/assets/cards/gift-atelier/elements/ornament-pair.webp",
+      "box": [
+        48,
+        204,
+        152
+      ],
+      "lift": 0.016,
+      "bob": 0.0012
+    },
+    {
+      "id": "stocking",
+      "src": "/assets/cards/gift-atelier/elements/stocking.webp",
+      "box": [
+        766,
+        198,
+        120
+      ],
+      "lift": 0.016,
+      "bob": 0.0012
+    },
+    {
+      "id": "gifts-left",
+      "src": "/assets/cards/gift-atelier/elements/gifts-left.webp",
+      "box": [
+        66,
+        700,
+        228
+      ],
+      "lift": 0.018
+    },
+    {
+      "id": "gifts-right",
+      "src": "/assets/cards/gift-atelier/elements/gifts-right.webp",
+      "box": [
+        618,
+        798,
+        256
+      ],
+      "lift": 0.018
+    },
+    {
+      "id": "awning",
+      "src": "/assets/cards/gift-atelier/elements/awning.webp",
+      "box": [
+        136,
+        54,
+        668
+      ],
+      "lift": 0.022
+    },
+    {
+      "id": "gingerbread",
+      "src": "/assets/cards/gift-atelier/elements/gingerbread.webp",
+      "box": [
+        466,
+        850,
+        132
+      ],
+      "lift": 0.022
+    },
+    {
+      "id": "teddy",
+      "src": "/assets/cards/gift-atelier/elements/teddy.webp",
+      "box": [
+        274,
+        826,
+        174
+      ],
+      "lift": 0.024
+    },
+    {
+      "id": "candy-canes",
+      "src": "/assets/cards/gift-atelier/elements/candy-canes.webp",
+      "box": [
+        578,
+        888,
+        114
+      ],
+      "lift": 0.026
+    },
+    {
+      "id": "clock-crest",
+      "src": "/assets/cards/gift-atelier/elements/clock-crest.webp",
+      "box": [
+        411,
+        66,
+        118
+      ],
+      "lift": 0.028,
+      "bob": 0.0015
+    }
+  ],
+  "motifs": [
+    {
+      "src": "/assets/cards/gift-atelier/elements/clock-crest.webp",
+      "px": 560
+    },
+    {
+      "src": "/assets/cards/gift-atelier/elements/candy-canes.webp",
+      "px": 320
+    }
+  ]
+}
