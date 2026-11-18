@@ -8,6 +8,7 @@ import { EnvelopeScene } from "@/components/envelope/EnvelopeScene";
 import { CARD_ASSETS } from "@/lib/cardAssets";
 import { lettersApi, type SentLetter } from "@/lib/client/lettersApi";
 import { readOutbox, rememberOutbox } from "@/lib/client/outboxStorage";
+import { hideChristmasLoading } from "@/lib/loadingVeil";
 import { clearDraft, loadDraft, saveDraft } from "@/lib/editor/draftStorage";
 import { isSealValid, sealKey } from "@/lib/envelope/sealFlow";
 import { createEditorState, createInitialDraft, duplicateDraft, editorReducer, toLetterDraft } from "@/lib/editor/editorState";
@@ -199,7 +200,10 @@ export function SenderFlow({ initialTemplate }: { initialTemplate: CardTemplateI
                 paper={draft.paper}
                 startSealed={alreadySealed}
                 onSealed={sealed}
-                onFirstFrame={() => setEnvelopeReady(true)}
+                onFirstFrame={() => {
+                  setEnvelopeReady(true);
+                  hideChristmasLoading();
+                }}
               />
             )}
             {/* The 信封 step's card stays on top until the envelope has drawn its first frame. */}

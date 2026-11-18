@@ -36,6 +36,97 @@ body {
   cursor: pointer;
 }
 
+/* ── Loading veil (layout.tsx) ─────────────────────────────────────────────
+   Painted from the very first HTML: pure CSS + a 4.5KB SVG, no Three.js, no
+   hydration. window.hideChristmasLoading() adds .is-hidden (480ms fade). */
+.site-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: var(--bg-canvas);
+  display: grid;
+  place-items: center;
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity 480ms ease,
+    visibility 480ms ease;
+}
+.site-loading.is-hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.loading-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(100%, 420px);
+  padding: 28px;
+  text-align: center;
+}
+.loading-card {
+  width: min(280px, 70vw);
+  height: auto;
+  display: block;
+}
+.loading-brand {
+  margin: 0 0 9px;
+  font:
+    italic 500 clamp(32px, 7vw, 43px) / 1.2 "Snell Roundhand",
+    "Apple Chancery",
+    "Brush Script MT",
+    cursive;
+  color: var(--text-primary);
+}
+.loading-message {
+  font: 400 12px/1.8 Georgia, serif;
+  letter-spacing: 0.035em;
+  color: var(--text-muted);
+  margin: 0;
+}
+.loading-dots {
+  display: flex;
+  gap: 7px;
+  margin-top: 24px;
+  align-items: center;
+  justify-content: center;
+}
+.loading-dots i {
+  display: block;
+  width: 4px;
+  height: 4px;
+  background: #b9a58c;
+  border-radius: 50%;
+  animation: loading-pulse 1.35s ease-in-out infinite;
+}
+.loading-dots i:nth-child(2) {
+  animation-delay: 0.18s;
+}
+.loading-dots i:nth-child(3) {
+  animation-delay: 0.36s;
+}
+@keyframes loading-pulse {
+  0%,
+  70%,
+  100% {
+    opacity: 0.28;
+    transform: scale(0.8);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .site-loading {
+    transition: none;
+  }
+  .loading-dots i {
+    animation: none;
+  }
+}
+
 @keyframes snow-fall {
   0% {
     transform: translateY(-10vh) translateX(0);

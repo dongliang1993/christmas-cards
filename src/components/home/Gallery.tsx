@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { BookOpen, BookOpenCheck } from "lucide-react";
 import { ChristmasCard3D } from "@/components/ChristmasCard3D";
 import { CARD_ASSETS } from "@/lib/cardAssets";
+import { hideChristmasLoading } from "@/lib/loadingVeil";
 import { playSwipe } from "@/lib/sfx";
 import { CARD_TEMPLATES, TEMPLATE_MAP } from "@/lib/templates";
 import type { CardTemplateId } from "@/lib/types";
@@ -78,6 +79,7 @@ export function Gallery() {
         hand={hand}
         handFocus={focus}
         onToggleOpen={toggleOpen}
+        onFirstFrame={hideChristmasLoading}
       />
 
       <nav

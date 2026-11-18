@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" role="img" aria-labelledby="title desc">
+  <title id="title">Christmas card opening</title>
+  <desc id="desc">An illustrated paper Christmas card gently opens, with a Christmas tree and twinkling golden stars.</desc>
+  <style>
+    .cover { transform-origin: 160px 126px; animation: open-card 3.8s cubic-bezier(.45,0,.3,1) infinite; }
+    .twinkle-a {animation: twinkle 2.6s ease-in-out infinite; transform-origin:center}
+    .twinkle-b {animation: twinkle 2.6s ease-in-out 1.15s infinite; transform-origin:center}
+    .float {animation: float 3.8s ease-in-out infinite}
+    @keyframes open-card { 0%, 12%, 100% {transform:scaleX(.87)} 48%, 74% {transform:scaleX(1)} }
+    @keyframes twinkle {0%,100%{opacity:.35} 45%{opacity:1} }
+    @keyframes float {0%,100%{transform:translateY(1px)} 50%{transform:translateY(-2px)}}
+    @media (prefers-reduced-motion:reduce) { .cover,.twinkle-a,.twinkle-b,.float {animation:none!important} }
+  </style>
+  <defs>
+    <linearGradient id="paper" x1="0" x2=".85" y1="0" y2="1"><stop stop-color="#F5F0E7"/><stop offset="1" stop-color="#EAE0D0"/></linearGradient>
+    <linearGradient id="sage" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#D8E1D2"/><stop offset="1" stop-color="#BECDB9"/></linearGradient>
+    <linearGradient id="red" x1="0" x2=".9" y1="0" y2="1"><stop stop-color="#A44840"/><stop offset="1" stop-color="#7E302F"/></linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%"><feGaussianBlur stdDeviation="5"/></filter>
+    <pattern id="fiber" width="14" height="14" patternUnits="userSpaceOnUse"><path d="M2 7l2-1M9 2l1 2M11 10l-2 1" stroke="#FFF" stroke-width=".55" opacity=".3"/></pattern>
+  </defs>
+  <ellipse cx="161" cy="211" rx="85" ry="8" fill="#857769" opacity=".15" filter="url(#shadow)"/>
+  <g class="float">
+    <!-- Interior card: the red panel is visible while the pale-green cover opens. -->
+    <path d="M160 45 L246 60 Q251 61 251 66 L251 192 Q251 199 245 198 L160 185 Z" fill="url(#paper)" stroke="#BBAD98" stroke-width="1.5"/>
+    <path d="M167 56 L240 69 L240 187 L167 175 Z" fill="url(#red)" stroke="#D3AB74" stroke-width="1.5"/>
+    <path d="M174 68 L233 79 L233 179 L174 168 Z" fill="none" stroke="#E3C18F" opacity=".75" stroke-width=".75"/>
+    <!-- Simple pop-up tree. -->
+    <path d="M204 105 L205 172 L215 173 L215 106 Z" fill="#79553C"/>
+    <path d="M210 93 L188 129 L195 128 L182 150 L239 150 L225 128 L231 129 Z" fill="#476D59" stroke="#EAE6D4" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M200 112 Q211 119 221 113 M190 138 Q209 145 230 139" stroke="#E9E5D8" stroke-width="4.5" fill="none" stroke-linecap="round"/>
+    <path d="M210 80 l3.5 8 8.5 1 -6.5 5.5 2 8 -7.5-4.5 -7.5 4.5 2-8 -6.5-5.5 8.5-1 Z" fill="#E4BA6C" stroke="#FAE4AA" stroke-width=".75"/>
+    <circle cx="201" cy="127" r="2.5" fill="#C57360"/><circle cx="220" cy="139" r="2.5" fill="#E1B76B"/>
+    <!-- Gift and paper folded base. -->
+    <path d="M220 162 l23 4 0 18 -23-4z" fill="#F1E5CC"/><path d="M220 162 l-7 4 0 17 7-3z" fill="#DCCDB6"/>
+    <path d="M231 164 l4 1 0 17 -4-1z" fill="#B54F46"/><path d="M217 166 l26 4" stroke="#B54F46" stroke-width="3"/>
+    <path d="M218 158 q8-8 12 5 q-13 0-12-5 M241 161 q-8-8-11 2 q13 5 11-2" fill="#C45B4D"/>
+    <!-- Animated cover, hinged on the center fold. -->
+    <g class="cover">
+      <path d="M160 45 L74 60 Q69 61 69 66 L69 192 Q69 199 75 198 L160 185 Z" fill="url(#sage)" stroke="#9CAC97" stroke-width="1.5"/>
+      <path d="M160 45 L74 60 Q69 61 69 66 L69 192 Q69 199 75 198 L160 185 Z" fill="url(#fiber)"/>
+      <path d="M151 57 L82 69 L82 186 L151 175 Z" fill="none" stroke="#B69B65" stroke-width="1.4"/>
+      <path d="M116 83 Q116 77 121 83 L134 97 Q135 103 127 101 L115 94 L103 101 Q95 103 96 97 L110 83 Q115 77 116 83Z" fill="#F8F0DF" stroke="#E5D7BD" stroke-width="1"/>
+      <circle cx="115" cy="92" r="5" fill="#A34C45"/>
+      <path d="M104 127 C104 112 126 112 126 127 L126 151 L104 151Z" fill="#A54A43" stroke="#F7EDDA" stroke-width="3"/>
+      <path d="M106 161 Q115 155 124 161" fill="none" stroke="#A9B596" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="115" cy="162" r="2" fill="#B95247"/>
+    </g>
+    <path d="M160 45 L160 185" stroke="#958B77" stroke-width="1.2" opacity=".55"/>
+  </g>
+  <!-- Two tiny festive stars --><path class="twinkle-a" d="M54 96 l2 7 7 2 -7 2 -2 7 -2-7 -7-2 7-2Z" fill="#C9A365"/>
+  <path class="twinkle-b" d="M267 92 l1.5 5 5 1.5 -5 1.5 -1.5 5 -1.5-5 -5-1.5 5-1.5Z" fill="#C9A365"/>
+</svg>

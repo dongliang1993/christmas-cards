@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { lettersApi } from "@/lib/client/lettersApi";
 import { rememberOutbox } from "@/lib/client/outboxStorage";
+import { hideChristmasLoading } from "@/lib/loadingVeil";
 import type { LetterStatus, OutboxEntry } from "@/lib/letter/model";
 
 const STATUS: Record<LetterStatus, { label: string; className: string }> = {
@@ -20,6 +21,11 @@ export function OutboxView({ outboxId }: { outboxId: string }) {
   const [letters, setLetters] = useState<OutboxEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+
+  // No 3D scene on this page: drop the loading veil as soon as React mounts.
+  useEffect(() => {
+    hideChristmasLoading();
+  }, []);
 
   const load = useCallback(() => {
     lettersApi
