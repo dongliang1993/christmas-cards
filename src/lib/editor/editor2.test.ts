@@ -3,7 +3,7 @@ import { createEditorState, createInitialDraft, editorReducer, type EditorAction
 import { clampZoom, pageLabel, PAGES, stepZoom, ZOOM_MAX, ZOOM_MIN } from "./pages";
 
 const run = (s: EditorState, ...a: EditorAction[]) => a.reduce(editorReducer, s);
-const fresh = () => createEditorState(createInitialDraft("first-snow"));
+const fresh = () => createEditorState(createInitialDraft("winter-moonlight"));
 const add = (uid: string, face: "inside-left" | "inside-right" = "inside-left"): EditorAction => ({ type: "add-sticker", stickerId: "holly", face, uid });
 const z = (s: EditorState, uid: string) => s.draft.elements.find((e) => e.uid === uid)?.z;
 

@@ -46,7 +46,7 @@ describe("handleTransform", () => {
 
 describe("add-sticker at a drop point", () => {
   it("places the sticker where it was dropped", () => {
-    const s = editorReducer(createEditorState(createInitialDraft("first-snow")), {
+    const s = editorReducer(createEditorState(createInitialDraft("winter-moonlight")), {
       type: "add-sticker",
       stickerId: "holly",
       face: "inside-left",

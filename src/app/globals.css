@@ -19,6 +19,23 @@ body {
   overflow: hidden;
 }
 
+/* Tailwind preflight leaves buttons on the default arrow. Clickable controls should show a hand. */
+:where(
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  a[href],
+  label,
+  summary,
+  select:not(:disabled),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  input[type="file"]:not(:disabled),
+  input[type="range"]:not(:disabled),
+  input[type="color"]:not(:disabled)
+) {
+  cursor: pointer;
+}
+
 @keyframes snow-fall {
   0% {
     transform: translateY(-10vh) translateX(0);

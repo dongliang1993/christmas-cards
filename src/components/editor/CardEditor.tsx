@@ -16,6 +16,8 @@ interface Props {
   zoom: number;
   /** Preview: the card exactly as the recipient sees it, no editing. */
   preview: boolean;
+  /** The style picker shows the cover only: a tap must not open the card. */
+  locked?: boolean;
   onPage(page: PageId): void;
   card: RefObject<CardHandle | null>;
 }
@@ -60,12 +62,11 @@ function FocusOutline({ card, face }: { card: RefObject<CardHandle | null>; face
     <svg className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden>
       <polygon
         points={pts.map((p) => `${p.x},${p.y}`).join(" ")}
-        fill="#f59e0b"
-        fillOpacity={0.035}
-        stroke="#d97706"
-        strokeOpacity={0.45}
-        strokeWidth={1.5}
-        strokeDasharray="6 5"
+        fill="none"
+        stroke="#a8a29e"
+        strokeOpacity={0.7}
+        strokeWidth={1}
+        strokeDasharray="5 4"
       />
     </svg>
   );
@@ -75,7 +76,7 @@ function FocusOutline({ card, face }: { card: RefObject<CardHandle | null>; face
  * The card is the canvas (spec §4.3, §13): pick, drag, pinch and handles act
  * on the 3D pages directly. Tapping an element on either page edits it.
  */
-export function CardEditor({ state, dispatch, paper, page, zoom, preview, onPage, card }: Props) {
+export function CardEditor({ state, dispatch, paper, page, zoom, preview, locked = false, onPage, card }: Props) {
   const pointers = useRef(new Map<number, Point>());
   const gesture = useRef<Gesture | null>(null);
   const editing = page === "inside" && !preview;
@@ -86,8 +87,9 @@ export function CardEditor({ state, dispatch, paper, page, zoom, preview, onPage
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (!editing) {
-      // On the cover a tap opens the card to the inside pages.
-      if (page === "cover" && !preview) onPage("inside");
+      // On the cover a tap opens the card to the inside pages — unless the
+      // style picker is up, where the cover must stay closed.
+      if (page === "cover" && !preview && !locked) onPage("inside");
       return;
     }
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -161,7 +163,7 @@ export function CardEditor({ state, dispatch, paper, page, zoom, preview, onPage
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
-      style={{ cursor: page === "cover" && !preview ? "pointer" : "default" }}
+      style={{ cursor: page === "cover" && !preview && !locked ? "pointer" : "default" }}
     >
       <ChristmasCard3D
         templateId={state.draft.templateId}

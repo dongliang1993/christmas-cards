@@ -1,5 +1,6 @@
 import { storedDraftSchema } from "@/lib/letter/schema";
 import type { LetterDraft } from "@/lib/letter/model";
+import { FIXED_SEAL } from "@/lib/envelope/fixedSeal";
 import { toLetterDraft, withEditorIds, type EditorDraft } from "./editorState";
 
 export const DRAFT_STORAGE_KEY = "christmas-cards:draft";
@@ -10,11 +11,14 @@ const VERSION = 1;
  * unavailable (private mode, blocked site data): failures are swallowed
  * because losing a convenience must never break the editor.
  */
-export function saveDraft(storage: Pick<Storage, "setItem">, draft: EditorDraft): void {
+/** false when the draft could not be written, so the editor can say so. */
+export function saveDraft(storage: Pick<Storage, "setItem">, draft: EditorDraft): boolean {
   try {
     storage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ v: VERSION, draft: toLetterDraft(draft) }));
+    return true;
   } catch {
     /* storage full or blocked: the draft just won't survive a reload */
+    return false;
   }
 }
 
@@ -25,7 +29,9 @@ export function loadDraft(storage: Pick<Storage, "getItem">): EditorDraft | null
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object" || (parsed as { v?: unknown }).v !== VERSION) return null;
     const result = storedDraftSchema.safeParse((parsed as { draft?: unknown }).draft);
-    return result.success ? withEditorIds(result.data as LetterDraft) : null;
+    if (!result.success) return null;
+    // The seal picker is gone: a draft saved before keeps the fixed seal.
+    return withEditorIds({ ...(result.data as LetterDraft), seal: { ...FIXED_SEAL } });
   } catch {
     return null;
   }

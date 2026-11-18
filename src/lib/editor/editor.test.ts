@@ -11,12 +11,13 @@ import {
   type EditorState,
 } from "./editorState";
 import { DRAFT_STORAGE_KEY, loadDraft, saveDraft } from "./draftStorage";
+import { FIXED_SEAL } from "@/lib/envelope/fixedSeal";
 
 function run(state: EditorState, ...actions: EditorAction[]): EditorState {
   return actions.reduce(editorReducer, state);
 }
 
-const fresh = () => createEditorState(createInitialDraft("first-snow"));
+const fresh = () => createEditorState(createInitialDraft("winter-moonlight"));
 
 function addSticker(face: "inside-left" | "inside-right", uid: string): EditorAction {
   return { type: "add-sticker", stickerId: "holly", face, uid };
@@ -24,11 +25,11 @@ function addSticker(face: "inside-left" | "inside-right", uid: string): EditorAc
 
 describe("createInitialDraft", () => {
   it("starts with the template's message on the inside-right page", () => {
-    const draft = createInitialDraft("first-snow");
+    const draft = createInitialDraft("winter-moonlight");
     const texts = draft.elements.filter((e) => e.kind === "text");
     expect(texts).toHaveLength(1);
     expect(texts[0].face).toBe("inside-right");
-    expect(texts[0].kind === "text" && texts[0].text).toContain("Snow outside");
+    expect(texts[0].kind === "text" && texts[0].text).toContain("Under the same winter moon");
   });
 });
 
@@ -133,6 +134,33 @@ describe("editorReducer", () => {
     const s = run(fresh(), { type: "set", patch: { recipientName: "阿树", paper: "kraft" } });
     expect(s.draft).toMatchObject({ recipientName: "阿树", paper: "kraft" });
   });
+
+  it("copies a sticker slightly offset, on top, and selects the copy", () => {
+    const s = run(fresh(), addSticker("inside-left", "a"), { type: "duplicate", uid: "a", newUid: "b" });
+    const copy = s.draft.elements.find((e) => e.uid === "b");
+    expect(copy).toMatchObject({ kind: "sticker", face: "inside-left", x: 0.54, y: 0.54 });
+    expect(s.selected).toBe("b");
+  });
+
+  it("changing the template keeps everything placed and can be undone", () => {
+    const before = run(fresh(), addSticker("inside-left", "a"), {
+      type: "update-text",
+      uid: fresh().draft.elements[0].uid,
+      patch: { text: "改过的祝福" },
+    });
+    const after = run(before, { type: "set-template", templateId: "snow-town" });
+    expect(after.draft.templateId).toBe("snow-town");
+    expect(after.draft.elements).toEqual(before.draft.elements);
+    expect(after.selected).toBeNull();
+    const undone = run(after, { type: "undo" });
+    expect(undone.draft.templateId).toBe("winter-moonlight");
+    expect(undone.draft.elements).toEqual(before.draft.elements);
+  });
+
+  it("ignores switching to the template already in use", () => {
+    const s = run(fresh(), { type: "set-template", templateId: "winter-moonlight" });
+    expect(s.past).toHaveLength(0);
+  });
 });
 
 describe("toLetterDraft", () => {
@@ -155,7 +183,7 @@ describe("duplicateDraft", () => {
     expect(copy.paper).toBe("pearl");
     expect(copy.elements.filter((e) => e.kind === "sticker")).toHaveLength(1);
     const message = copy.elements.find((e) => e.kind === "text" && e.face === "inside-right");
-    expect(message?.kind === "text" && message.text).toContain("Snow outside");
+    expect(message?.kind === "text" && message.text).toContain("Under the same winter moon");
   });
 
   it("gives every element a new id", () => {
@@ -198,6 +226,18 @@ describe("draft storage", () => {
     const storage = memoryStorage();
     storage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ v: 1, draft: { templateId: "nope" } }));
     expect(loadDraft(storage)).toBeNull();
+  });
+
+  it("resets a stored seal to the fixed red snowflake: the picker is gone", () => {
+    const storage = memoryStorage();
+    const draft = { ...fresh().draft, seal: { color: "green" as const, stamp: "initials" as const, initials: "LD" } };
+    saveDraft(storage, draft);
+    expect(loadDraft(storage)?.seal).toEqual(FIXED_SEAL);
+  });
+
+  it("the fixed seal is red wax with the snowflake stamp", () => {
+    expect(FIXED_SEAL).toEqual({ color: "red", stamp: "snowflake" });
+    expect(createInitialDraft("winter-moonlight").seal).toEqual(FIXED_SEAL);
   });
 
   it("returns null when storage throws", () => {

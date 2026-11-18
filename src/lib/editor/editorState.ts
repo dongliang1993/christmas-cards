@@ -1,4 +1,5 @@
 import { nanoid } from "nanoid";
+import { FIXED_SEAL } from "@/lib/envelope/fixedSeal";
 import { LIMITS, type CardElement, type Face, type FontId, type Ink, type LetterDraft, type Placement } from "@/lib/letter/model";
 import { TEMPLATE_MAP } from "@/lib/templates";
 import type { CardTemplateId } from "@/lib/types";
@@ -11,13 +12,19 @@ export type EditorElement = CardElement & { uid: string };
 
 export type EditorDraft = Omit<LetterDraft, "elements"> & { elements: EditorElement[] };
 
+/** One undo step: the elements, and the template if that step changed it. */
+interface Snapshot {
+  elements: EditorElement[];
+  templateId?: CardTemplateId;
+}
+
 export interface EditorState {
   draft: EditorDraft;
   selected: string | null;
-  /** Earlier element lists, newest last. */
-  past: EditorElement[][];
-  /** Element lists undone, newest last; cleared by any new edit. */
-  future: EditorElement[][];
+  /** Earlier snapshots, newest last. */
+  past: Snapshot[];
+  /** Snapshots undone, newest last; cleared by any new edit. */
+  future: Snapshot[];
   /** The inside page new stickers and text land on (spec §13.4). */
   focusFace: Face;
 }
@@ -32,9 +39,11 @@ export type EditorAction =
   | { type: "add-text"; face: Face; uid: string; x: number; y: number; text: string; font: FontId; ink: Ink }
   | { type: "transform"; uid: string; patch: Partial<Pick<Placement, "x" | "y" | "scale" | "rotation">>; record: boolean }
   | { type: "update-text"; uid: string; patch: Partial<{ text: string; font: FontId; ink: Ink }> }
+  | { type: "duplicate"; uid: string; newUid: string }
   | { type: "remove"; uid: string }
   | { type: "select"; uid: string | null }
   | { type: "set"; patch: Partial<EnvelopeFields> }
+  | { type: "set-template"; templateId: CardTemplateId }
   | { type: "undo" }
   | { type: "redo" }
   | { type: "layer"; uid: string; dir: 1 | -1 }
@@ -58,7 +67,7 @@ export function createInitialDraft(templateId: CardTemplateId): EditorDraft {
     templateId,
     paper: "cold-press",
     envelopeColor: "ivory",
-    seal: { color: "red", stamp: "snowflake" },
+    seal: { ...FIXED_SEAL },
     recipientName: "",
     elements: [messageElement(templateId)],
     audioUrl: null,
@@ -116,7 +125,7 @@ function topZ(elements: EditorElement[], face: Face): number {
 
 function withElements(state: EditorState, elements: EditorElement[], record: boolean): EditorState {
   if (!record) return { ...state, draft: { ...state.draft, elements } };
-  const past = [...state.past, state.draft.elements].slice(-UNDO_DEPTH);
+  const past = [...state.past, { elements: state.draft.elements }].slice(-UNDO_DEPTH);
   return { ...state, past, future: [], draft: { ...state.draft, elements } };
 }
 
@@ -176,6 +185,19 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       );
       return withElements(state, next, true);
     }
+    case "duplicate": {
+      const el = elements.find((e) => e.uid === action.uid);
+      if (!el) return state;
+      if (countOn(elements, el.kind, el.face) >= (el.kind === "sticker" ? LIMITS.stickersPerFace : LIMITS.textsPerFace)) return state;
+      const copy: EditorElement = {
+        ...el,
+        uid: action.newUid,
+        x: clamp(el.x + 0.04, 0, 1),
+        y: clamp(el.y + 0.04, 0, 1),
+        z: topZ(elements, el.face),
+      };
+      return { ...withElements(state, [...elements, copy], true), selected: action.newUid, focusFace: el.face };
+    }
     case "remove": {
       const next = elements.filter((e) => e.uid !== action.uid);
       return { ...withElements(state, next, true), selected: state.selected === action.uid ? null : state.selected };
@@ -202,15 +224,32 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
     }
     case "set":
       return { ...state, draft: { ...state.draft, ...action.patch } };
+    case "set-template": {
+      if (action.templateId === state.draft.templateId) return state;
+      // The template only changes the cover; everything the sender placed stays
+      // where it is, and the change itself can be undone.
+      const past = [...state.past, { elements, templateId: state.draft.templateId }].slice(-UNDO_DEPTH);
+      return {
+        ...state,
+        past,
+        future: [],
+        selected: null,
+        draft: { ...state.draft, templateId: action.templateId },
+      };
+    }
     case "undo": {
       const previous = state.past.at(-1);
       if (!previous) return state;
-      const stillThere = previous.some((e) => e.uid === state.selected);
+      const stillThere = previous.elements.some((e) => e.uid === state.selected);
       return {
         ...state,
         past: state.past.slice(0, -1),
-        future: [...state.future, elements].slice(-UNDO_DEPTH),
-        draft: { ...state.draft, elements: previous },
+        future: [...state.future, { elements, templateId: previous.templateId && state.draft.templateId }].slice(-UNDO_DEPTH),
+        draft: {
+          ...state.draft,
+          elements: previous.elements,
+          ...(previous.templateId ? { templateId: previous.templateId } : {}),
+        },
         selected: stillThere ? state.selected : null,
       };
     }
@@ -220,9 +259,13 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       return {
         ...state,
         future: state.future.slice(0, -1),
-        past: [...state.past, elements].slice(-UNDO_DEPTH),
-        draft: { ...state.draft, elements: next },
-        selected: next.some((e) => e.uid === state.selected) ? state.selected : null,
+        past: [...state.past, { elements, templateId: next.templateId && state.draft.templateId }].slice(-UNDO_DEPTH),
+        draft: {
+          ...state.draft,
+          elements: next.elements,
+          ...(next.templateId ? { templateId: next.templateId } : {}),
+        },
+        selected: next.elements.some((e) => e.uid === state.selected) ? state.selected : null,
       };
     }
     case "load":

@@ -55,10 +55,10 @@ export function SelectionOverlay({ card, uid, current, onTransform, onDelete }: 
       <circle
         cx={br.x}
         cy={br.y}
-        r={10}
+        r={7}
         fill="#fff"
         stroke="#1c1917"
-        strokeWidth={1.5}
+        strokeWidth={1.2}
         className="pointer-events-auto cursor-nwse-resize touch-none"
         onPointerDown={(e) => {
           e.stopPropagation();
@@ -76,15 +76,15 @@ export function SelectionOverlay({ card, uid, current, onTransform, onDelete }: 
           drag.current = null;
         }}
       />
-      <foreignObject x={tr.x - 14} y={tr.y - 30} width={28} height={28} className="pointer-events-auto">
+      <foreignObject x={tr.x - 10} y={tr.y - 21} width={20} height={20} className="pointer-events-auto">
         <button
           type="button"
           aria-label="删除"
           onPointerDown={(e) => e.stopPropagation()}
           onClick={onDelete}
-          className="flex h-7 w-7 items-center justify-center rounded-full bg-stone-900 text-white shadow"
+          className="flex h-5 w-5 items-center justify-center rounded-full bg-stone-900 text-white shadow"
         >
-          <X className="h-4 w-4" />
+          <X className="h-3 w-3" />
         </button>
       </foreignObject>
     </svg>
