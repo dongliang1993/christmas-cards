@@ -1,41 +1,43 @@
-import type { CardTemplate, CardTemplateId } from "./types";
+import type { ActiveTemplateId, CardTemplate, CardTemplateId } from "./types";
+import { ACTIVE_TEMPLATE_IDS } from "./types";
 
+/** Templates still offered in the app; legacy covers were retired. */
 export const CARD_TEMPLATES: CardTemplate[] = [
   {
-    id: "first-snow",
-    name: "First Snow",
-    subtitle: "红围巾猫咪与窗前烛火",
-    accentColor: "#b8322c",
-    paperTint: "#f5efe9",
-    insideTint: "#faf7f2",
-    defaultMessage: "Snow outside,\nwarm inside,\nthinking of you.",
+    id: "winter-moonlight",
+    name: "",
+    subtitle: "",
+    accentColor: "#b8954f",
+    paperTint: "#f3ede3",
+    insideTint: "#fbf8f2",
+    defaultMessage: "Under the same winter moon,\nsending you warm wishes\nand quiet starlight.",
   },
   {
-    id: "home-christmas",
-    name: "Home for Christmas",
-    subtitle: "雪夜亮灯的森林木屋",
-    accentColor: "#2e5a44",
-    paperTint: "#eef2ef",
-    insideTint: "#f8faf8",
-    defaultMessage: "May your home be filled\nwith warmth, laughter,\nand quiet winter magic.",
+    id: "forest-letter",
+    name: "",
+    subtitle: "",
+    accentColor: "#5b7561",
+    paperTint: "#dde4da",
+    insideTint: "#f7f9f5",
+    defaultMessage: "A little letter from the woods,\nwishing you quiet mornings\nand gentle winter magic.",
   },
   {
-    id: "sweet-dreams",
-    name: "Sweet Dreams",
-    subtitle: "月光下的金色小鹿",
-    accentColor: "#b58938",
-    paperTint: "#f4f1ea",
-    insideTint: "#fbf9f4",
-    defaultMessage: "Wishing you peaceful nights,\nsoft starlight, and a\nvery Merry Christmas.",
+    id: "gift-atelier",
+    name: "",
+    subtitle: "",
+    accentColor: "#8b3232",
+    paperTint: "#f4ece4",
+    insideTint: "#fbf8f2",
+    defaultMessage: "Wrapped with warmth and cheer,\nmay every little surprise\nbrighten your winter days.",
   },
   {
-    id: "lantern-light",
-    name: "Lantern Light",
-    subtitle: "提灯守候的冬日小猫",
-    accentColor: "#c46b2d",
-    paperTint: "#f2eee9",
-    insideTint: "#faf6f0",
-    defaultMessage: "May a warm little light\nguide every step you take\ninto the new year.",
+    id: "snow-town",
+    name: "",
+    subtitle: "",
+    accentColor: "#32445c",
+    paperTint: "#eef2f6",
+    insideTint: "#fbf8f2",
+    defaultMessage: "From a little town under snow,\nmay warm lights find you\nwherever this winter goes.",
   },
 ];
 
@@ -45,8 +47,18 @@ export const TEMPLATE_MAP: Record<CardTemplateId, CardTemplate> =
       ...acc,
       [item.id]: item,
     }),
-    {} as Record<CardTemplateId, CardTemplate>,
+    // Legacy covers are retired: old letters still validate, they just
+    // render with the default template's look.
+    Object.fromEntries(
+      (["first-snow", "home-christmas", "sweet-dreams", "lantern-light"] as const).map((id) => [
+        id,
+        CARD_TEMPLATES[0],
+      ]),
+    ) as Record<CardTemplateId, CardTemplate>,
   );
+
+/** The template a fresh letter starts from (the first active one). */
+export const DEFAULT_TEMPLATE_ID: ActiveTemplateId = ACTIVE_TEMPLATE_IDS[0];
 
 export const PRESET_MESSAGES: string[] = [
   "Snow outside,\nwarm inside,\nthinking of you.",

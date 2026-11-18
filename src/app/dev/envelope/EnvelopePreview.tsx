@@ -15,9 +15,8 @@ export function EnvelopePreview() {
         mode={mode}
         envelopeColor="ivory"
         seal={seal}
-        recipientName="小雪"
-        coverSrc="/assets/cards/first-snow/cover.png"
-        postmark={mode === "transit" ? "在路上 · 12月24日送达" : null}
+        coverSrc="/assets/cards/winter-moonlight/cover.webp"
+        deliverLabel={mode === "transit" ? "12月24日" : null}
         onSealed={() => setLog((l) => [...l, "sealed"])}
         onOpened={() => setLog((l) => [...l, "opened"])}
       />

@@ -9,7 +9,18 @@ import {
   type CardElement,
 } from "./model";
 
-const TEMPLATE_IDS = ["first-snow", "home-christmas", "sweet-dreams", "lantern-light"] as const;
+// Legacy ids stay valid so stored letters keep parsing; new letters pick
+// from CARD_TEMPLATES (the active four).
+const TEMPLATE_IDS = [
+  "first-snow",
+  "home-christmas",
+  "sweet-dreams",
+  "lantern-light",
+  "winter-moonlight",
+  "forest-letter",
+  "gift-atelier",
+  "snow-town",
+] as const;
 const FACES = ["inside-left", "inside-right"] as const;
 
 const placement = {

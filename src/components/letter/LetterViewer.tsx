@@ -1,20 +1,22 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { DEFAULT_TEMPLATE_ID } from "@/lib/templates";
 import { Pause, Play } from "lucide-react";
 import { ChristmasCard3D } from "@/components/ChristmasCard3D";
 import { EnvelopeScene } from "@/components/envelope/EnvelopeScene";
 import { CARD_ASSETS } from "@/lib/cardAssets";
 import { lettersApi } from "@/lib/client/lettersApi";
+import { playSwipe } from "@/lib/sfx";
 import type { PublicLetter } from "@/lib/letter/model";
 import { shouldRecordOpening, viewerStage } from "@/lib/letter/viewer";
 
 /** Longest wait we arm a timer for; beyond it the page simply asks on reload. */
 const MAX_TIMER_MS = 24 * 3600_000;
 
-function postmarkFor(deliverAt: string): string {
+function deliverLabelFor(deliverAt: string): string {
   const d = new Date(deliverAt);
-  return `在路上 · ${d.getMonth() + 1}月${d.getDate()}日送达`;
+  return `${d.getMonth() + 1}月${d.getDate()}日`;
 }
 
 /** The recipient's page (spec §5): envelope in transit → break the seal → the card. */
@@ -23,7 +25,10 @@ export function LetterViewer({ id }: { id: string }) {
   const [error, setError] = useState<string | null>(null);
   const [broken, setBroken] = useState(false);
   const [now, setNow] = useState(() => new Date());
-  const [open, setOpen] = useState(true);
+  // The card arrives shut, exactly as it left the envelope (envelope spec §5); the recipient opens it.
+  const [open, setOpen] = useState(false);
+  /** The card has drawn itself under the envelope: the envelope can go. */
+  const [cardReady, setCardReady] = useState(false);
   const [playing, setPlaying] = useState(false);
   const audio = useRef<HTMLAudioElement | null>(null);
 
@@ -68,17 +73,21 @@ export function LetterViewer({ id }: { id: string }) {
   const content = letter.content;
   return (
     <main className="relative h-dvh w-screen overflow-hidden bg-[#fbfaf9] select-none">
-      {stage !== "card" || !content ? (
-        <EnvelopeScene
-          mode={stage === "transit" ? "transit" : "open"}
-          envelopeColor={letter.envelopeColor}
-          seal={letter.seal}
-          recipientName={letter.recipientName}
-          coverSrc={CARD_ASSETS[content?.templateId ?? "first-snow"].coverSrc}
-          postmark={stage === "transit" ? postmarkFor(letter.deliverAt) : null}
-          onOpened={onOpened}
-        />
-      ) : (
+      {/* The envelope stays on top until the card underneath has drawn its first frame. */}
+      {(stage !== "card" || !content || !cardReady) && (
+        <div className="absolute inset-0 z-10">
+          <EnvelopeScene
+            mode={stage === "transit" ? "transit" : "open"}
+            envelopeColor={letter.envelopeColor}
+            seal={letter.seal}
+            coverSrc={CARD_ASSETS[content?.templateId ?? DEFAULT_TEMPLATE_ID].coverSrc}
+            paper={content?.paper}
+            deliverLabel={stage === "transit" ? deliverLabelFor(letter.deliverAt) : null}
+            onOpened={onOpened}
+          />
+        </div>
+      )}
+      {stage === "card" && content && (
         <>
           <ChristmasCard3D
             templateId={content.templateId}
@@ -86,9 +95,14 @@ export function LetterViewer({ id }: { id: string }) {
             signature=""
             isOpen={open}
             isPaused={false}
+            flyIn={false}
             elements={content.elements}
             paper={content.paper}
-            onToggleOpen={() => setOpen((v) => !v)}
+            onToggleOpen={() => {
+              if (!open) playSwipe("open");
+              setOpen((v) => !v);
+            }}
+            onFirstFrame={() => setCardReady(true)}
           />
           {content.audioUrl && (
             <>

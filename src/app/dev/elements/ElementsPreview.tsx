@@ -27,7 +27,7 @@ export function ElementsPreview() {
   return (
     <main className="relative h-dvh w-screen overflow-hidden bg-[#fbfaf9]">
       <ChristmasCard3D
-        templateId="first-snow"
+        templateId="winter-moonlight"
         message=""
         signature=""
         isOpen={open}
