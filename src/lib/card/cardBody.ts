@@ -18,6 +18,8 @@ import { putSurface, type CardFace, type CardInside, type RuntimeLiftedMesh } fr
 /** Cover artwork size in pixels; living-card positions are in these. */
 export const COVER_PX_W = 940;
 export const COVER_PX_H = 1316;
+/** The candle's light on the paper around it (its sprite's gain is GLOW_HDR). */
+const GLOW_LIGHT = 0.55;
 /** Segmented panels so the CPU bow can curve them. */
 const BEND_SEGMENTS = 24;
 
@@ -156,7 +158,9 @@ function createMaterials(ctx: BodyContext): BodyMaterials {
     normalMap: paper,
     normalScale: new THREE.Vector2(0.9, 0.9),
   });
-  for (const m of [edge, cover, insideLeft, insideRightBase, insideRightSheet, back]) ctx.lampGate.install(m);
+  // The cover is gated after its mover shader (see createCardBody): that one
+  // replaces onBeforeCompile outright, while the gate chains onto what is there.
+  for (const m of [edge, insideLeft, insideRightBase, insideRightSheet, back]) ctx.lampGate.install(m);
   return { edge, cover, insideLeft, insideRightBase, insideRightSheet, back };
 }
 
@@ -173,6 +177,8 @@ export function createCardBody(ctx: BodyContext, startOpen = false): CardBody {
   outer.add(center);
   const mats = createMaterials(ctx);
   const moverShader = installMoverShader(mats.cover, COVER_PX_W, COVER_PX_H);
+  // After the movers: the gate chains onto them (the other order drops the gate).
+  ctx.lampGate.install(mats.cover);
   const { edge } = mats;
 
   const rightGeo = new THREE.BoxGeometry(CARD_W, CARD_H, CARD_THICKNESS, BEND_SEGMENTS, 1, 1);
@@ -384,7 +390,7 @@ export function createCardBody(ctx: BodyContext, startOpen = false): CardBody {
         : 1 + Math.sin(t * 1.8 + phase) * 0.08;
       const openFade = 1 - Math.min(1, a.openProgress * 1.4);
       const flare = 1 + 1.6 * a.glowFlare * a.glowFlare;
-      glowLight.intensity = 0.85 * flicker * flare * (0.15 + 0.85 * openFade);
+      glowLight.intensity = GLOW_LIGHT * flicker * flare * (0.15 + 0.85 * openFade);
       glowSprite.visible = a.openProgress < 0.7;
       glowSpriteMat.opacity = Math.min(1, 0.65 * flicker * flare * (0.2 + 0.8 * openFade));
       snow.points.visible = a.openProgress < 0.7;

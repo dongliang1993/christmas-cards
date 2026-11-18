@@ -98,10 +98,30 @@ function motifSource(
   return null;
 }
 
+/**
+ * A sticker sits on the page, so it throws a soft contact shadow: without it
+ * a cream sticker on cream paper melts into the page at a glancing angle.
+ * Only on the colour pages, never on the relief bake's source.
+ */
+function withContactShadow(ctx: Ctx2d, on: boolean, draw: () => void): void {
+  if (!on) {
+    draw();
+    return;
+  }
+  ctx.save();
+  ctx.shadowColor = "rgba(84, 66, 48, 0.32)";
+  ctx.shadowBlur = 7;
+  ctx.shadowOffsetX = 1.5;
+  ctx.shadowOffsetY = 3;
+  draw();
+  ctx.restore();
+}
+
 function drawLeftMotifs(
   ctx: Ctx2d,
   coverImg: SurfaceSource | null | undefined,
   motifs: MotifSpec[],
+  lifted = false,
 ): void {
   for (const m of motifs) {
     const crop = motifSource(coverImg, m);
@@ -113,7 +133,7 @@ function drawLeftMotifs(
     if (m.turn) {
       ctx.rotate((m.turn * Math.PI) / 180);
     }
-    ctx.drawImage(crop, -dw / 2, -dh / 2, dw, dh);
+    withContactShadow(ctx, lifted, () => ctx.drawImage(crop, -dw / 2, -dh / 2, dw, dh));
     ctx.restore();
   }
 }
@@ -144,7 +164,7 @@ export function createInsideLeftCanvas(
   ctx.fillStyle = spine;
   ctx.fillRect(TEX_W - 44, 0, 44, TEX_H);
 
-  drawLeftMotifs(ctx, coverImg, motifs);
+  drawLeftMotifs(ctx, coverImg, motifs, true);
 
   ctx.fillStyle = "rgba(100, 88, 76, 0.65)";
   ctx.font = "italic 28px Georgia, serif";
@@ -281,7 +301,7 @@ export function createInsideRightSheetCanvas(
     );
   }
 
-  drawInsertMotifs(ctx, w, h, coverImg, insertMotifs);
+  drawInsertMotifs(ctx, w, h, coverImg, insertMotifs, true);
 
   return canvas;
 }
@@ -292,13 +312,14 @@ function drawInsertMotifs(
   h: number,
   coverImg: SurfaceSource | null | undefined,
   motifs: MotifSpec[],
+  lifted = false,
 ): void {
   for (const m of motifs) {
     const crop = motifSource(coverImg, m);
     if (!crop) continue;
     const dw = w * m.width;
     const dh = (crop.height / crop.width) * dw;
-    ctx.drawImage(crop, w * m.at[0] - dw / 2, h * m.at[1] - dh / 2, dw, dh);
+    withContactShadow(ctx, lifted, () => ctx.drawImage(crop, w * m.at[0] - dw / 2, h * m.at[1] - dh / 2, dw, dh));
   }
 }
 

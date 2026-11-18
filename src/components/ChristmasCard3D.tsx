@@ -131,7 +131,12 @@ export interface CardHandle {
 /** How far the pointer slides the studio softbox (SOFTBOX_POS in lib/studio). */
 const SOFTBOX_SWAY = 1.4;
 /** Pointer lamp peak intensity: the glint on wet paint. */
-const LAMP_INTENSITY = 1.5;
+const LAMP_INTENSITY = 0.9;
+/**
+ * How high the pointer lamp hangs over the card. Low, so its glint is a small
+ * spot right under the pointer (high, it was a wide sheen landing off to one side).
+ */
+const LAMP_HEIGHT = 0.5;
 
 /** Motion budget scaling for prefers-reduced-motion (#10). */
 function motionScale(): number {
@@ -499,7 +504,7 @@ export function ChristmasCard3D({
     // Physically decayed and held off the face; lights stickers inside too.
     // It rides the card in front (re-parented, never re-added: the light count stays put).
     const hoverLamp = new THREE.PointLight(0xfffaf4, 0, 4.2, 2);
-    hoverLamp.position.set(CARD_W / 2, 0, 1.15);
+    hoverLamp.position.set(CARD_W / 2, 0, LAMP_HEIGHT);
     fb.center.add(hoverLamp);
 
     const particleTex = createParticleSprite();

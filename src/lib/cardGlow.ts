@@ -2,7 +2,7 @@ import * as THREE from "three";
 
 /** Candle glow sprite size relative to the template spec, and its HDR gain. */
 export const GLOW_SIZE = 0.5;
-export const GLOW_HDR = 4.2;
+export const GLOW_HDR = 2.8;
 
 /** Shared radial glow sprite: the real card's candle and the hand's stand-ins. */
 export function createGlowSpriteTexture(): THREE.CanvasTexture {
