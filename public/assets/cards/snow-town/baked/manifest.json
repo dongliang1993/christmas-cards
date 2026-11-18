@@ -1,0 +1,107 @@
+{
+  "version": 1,
+  "card": "snow-town",
+  "entries": [
+    {
+      "key": "/assets/cards/snow-town/cover.webp|1|2.2",
+      "name": "cover",
+      "normal": "cover-normal.webp",
+      "surface": "cover-surface.webp"
+    },
+    {
+      "key": "snow|snow-town",
+      "name": "snow-mask",
+      "src": "snow-mask.webp"
+    },
+    {
+      "key": "left-stickers|snow-town",
+      "name": "left",
+      "normal": "left-normal.webp",
+      "surface": "left-surface.webp"
+    },
+    {
+      "key": "sheet-stickers|snow-town",
+      "name": "sheet",
+      "normal": "sheet-normal.webp",
+      "surface": "sheet-surface.webp"
+    },
+    {
+      "key": "base|snow-town|1|2.2",
+      "name": "base",
+      "normal": "base-normal.webp",
+      "surface": "base-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/snow-town/elements/bridge-snow.webp|1212",
+      "name": "layer-bridge-snow",
+      "normal": "layer-bridge-snow-normal.webp",
+      "surface": "layer-bridge-snow-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/snow-town/elements/snowman.webp|300",
+      "name": "layer-snowman",
+      "normal": "layer-snowman-normal.webp",
+      "surface": "layer-snowman-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/snow-town/elements/streetlamp.webp|225",
+      "name": "layer-streetlamp",
+      "normal": "layer-streetlamp-normal.webp",
+      "surface": "layer-streetlamp-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/snow-town/elements/wreath-left.webp|495",
+      "name": "layer-wreath-left",
+      "normal": "layer-wreath-left-normal.webp",
+      "surface": "layer-wreath-left-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/snow-town/elements/wreath-right.webp|495",
+      "name": "layer-wreath-right",
+      "normal": "layer-wreath-right-normal.webp",
+      "surface": "layer-wreath-right-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/snow-town/elements/cloud-pair.webp|345",
+      "name": "layer-cloud-pair",
+      "normal": "layer-cloud-pair-normal.webp",
+      "surface": "layer-cloud-pair-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/snow-town/elements/top-bow.webp|360",
+      "name": "layer-top-bow",
+      "normal": "layer-top-bow-normal.webp",
+      "surface": "layer-top-bow-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/snow-town/elements/snowflake-small.webp|180",
+      "name": "layer-snowflake-small",
+      "normal": "layer-snowflake-small-normal.webp",
+      "surface": "layer-snowflake-small-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/snow-town/elements/snowflake-small.webp|150",
+      "name": "layer-snowflake-small-b",
+      "normal": "layer-snowflake-small-b-normal.webp",
+      "surface": "layer-snowflake-small-b-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/snow-town/elements/snowflake-small.webp|126",
+      "name": "layer-snowflake-small-c",
+      "normal": "layer-snowflake-small-c-normal.webp",
+      "surface": "layer-snowflake-small-c-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/snow-town/elements/snowflake-main.webp|210",
+      "name": "layer-snowflake-main",
+      "normal": "layer-snowflake-main-normal.webp",
+      "surface": "layer-snowflake-main-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/snow-town/elements/star-icicle.webp|144",
+      "name": "layer-star-icicle",
+      "normal": "layer-star-icicle-normal.webp",
+      "surface": "layer-star-icicle-surface.webp"
+    }
+  ]
+}

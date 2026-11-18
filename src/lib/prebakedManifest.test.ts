@@ -53,3 +53,16 @@ describe("parsePrebakedManifest: trust boundary for generated assets", () => {
     expect(prebakedManifestSchema.parse(valid).entries).toHaveLength(2);
   });
 });
+
+describe("prebakedBase: every card in the gallery reads its own prebaked assets", () => {
+  it("points each template at a baked/ directory that exists", async () => {
+    const { existsSync } = await import("node:fs");
+    const { CARD_TEMPLATES } = await import("./templates");
+    const { prebakedBase } = await import("./prebakedManifest");
+    for (const t of CARD_TEMPLATES) {
+      const base = prebakedBase(t.id);
+      expect(base).toBe(`/assets/cards/${t.id}/baked`);
+      expect(existsSync(`public${base}/manifest.json`)).toBe(true);
+    }
+  });
+});

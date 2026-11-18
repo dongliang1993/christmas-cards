@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "card": "gift-atelier",
+  "entries": [
+    {
+      "key": "/assets/cards/gift-atelier/cover.webp|1|2.2",
+      "name": "cover",
+      "normal": "cover-normal.webp",
+      "surface": "cover-surface.webp"
+    },
+    {
+      "key": "snow|gift-atelier",
+      "name": "snow-mask",
+      "src": "snow-mask.webp"
+    },
+    {
+      "key": "left-stickers|gift-atelier",
+      "name": "left",
+      "normal": "left-normal.webp",
+      "surface": "left-surface.webp"
+    },
+    {
+      "key": "sheet-stickers|gift-atelier",
+      "name": "sheet",
+      "normal": "sheet-normal.webp",
+      "surface": "sheet-surface.webp"
+    },
+    {
+      "key": "base|gift-atelier|1|2.2",
+      "name": "base",
+      "normal": "base-normal.webp",
+      "surface": "base-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/gift-atelier/elements/garland.webp|960",
+      "name": "layer-garland",
+      "normal": "layer-garland-normal.webp",
+      "surface": "layer-garland-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/gift-atelier/elements/ornament-pair.webp|228",
+      "name": "layer-ornament-pair",
+      "normal": "layer-ornament-pair-normal.webp",
+      "surface": "layer-ornament-pair-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/gift-atelier/elements/stocking.webp|180",
+      "name": "layer-stocking",
+      "normal": "layer-stocking-normal.webp",
+      "surface": "layer-stocking-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/gift-atelier/elements/gifts-left.webp|342",
+      "name": "layer-gifts-left",
+      "normal": "layer-gifts-left-normal.webp",
+      "surface": "layer-gifts-left-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/gift-atelier/elements/gifts-right.webp|384",
+      "name": "layer-gifts-right",
+      "normal": "layer-gifts-right-normal.webp",
+      "surface": "layer-gifts-right-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/gift-atelier/elements/awning.webp|1002",
+      "name": "layer-awning",
+      "normal": "layer-awning-normal.webp",
+      "surface": "layer-awning-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/gift-atelier/elements/gingerbread.webp|198",
+      "name": "layer-gingerbread",
+      "normal": "layer-gingerbread-normal.webp",
+      "surface": "layer-gingerbread-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/gift-atelier/elements/teddy.webp|261",
+      "name": "layer-teddy",
+      "normal": "layer-teddy-normal.webp",
+      "surface": "layer-teddy-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/gift-atelier/elements/candy-canes.webp|171",
+      "name": "layer-candy-canes",
+      "normal": "layer-candy-canes-normal.webp",
+      "surface": "layer-candy-canes-surface.webp"
+    },
+    {
+      "key": "layer|/assets/cards/gift-atelier/elements/clock-crest.webp|177",
+      "name": "layer-clock-crest",
+      "normal": "layer-clock-crest-normal.webp",
+      "surface": "layer-clock-crest-surface.webp"
+    }
+  ]
+}
