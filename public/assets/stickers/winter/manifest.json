@@ -14,16 +14,64 @@
       "src": "/assets/stickers/winter/sparkles.png"
     },
     {
+      "id": "bell",
+      "label": "铃铛",
+      "material": "foil",
+      "src": "/assets/stickers/winter/bell.png"
+    },
+    {
+      "id": "moon",
+      "label": "弯月",
+      "material": "foil",
+      "src": "/assets/stickers/winter/moon.png"
+    },
+    {
+      "id": "snowflake",
+      "label": "雪花",
+      "material": "pearl",
+      "src": "/assets/stickers/winter/snowflake.png"
+    },
+    {
+      "id": "cloud",
+      "label": "云朵",
+      "material": "pearl",
+      "src": "/assets/stickers/winter/cloud.png"
+    },
+    {
+      "id": "holly",
+      "label": "冬青",
+      "material": "paint",
+      "src": "/assets/stickers/winter/holly.png"
+    },
+    {
       "id": "pine-tree",
       "label": "小松树",
       "material": "paint",
       "src": "/assets/stickers/winter/pine-tree.png"
     },
     {
+      "id": "gift",
+      "label": "礼物",
+      "material": "paint",
+      "src": "/assets/stickers/winter/gift.png"
+    },
+    {
+      "id": "bow",
+      "label": "蝴蝶结",
+      "material": "paint",
+      "src": "/assets/stickers/winter/bow.png"
+    },
+    {
       "id": "gingerbread",
       "label": "姜饼人",
       "material": "paint",
       "src": "/assets/stickers/winter/gingerbread.png"
+    },
+    {
+      "id": "stocking",
+      "label": "圣诞袜",
+      "material": "paint",
+      "src": "/assets/stickers/winter/stocking.png"
     }
   ]
 }
