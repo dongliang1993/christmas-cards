@@ -23,7 +23,7 @@ describe("outbox storage", () => {
 });
 
 describe("lettersApi.send", () => {
-  const draft = { ...toLetterDraft(createInitialDraft("first-snow")), recipientName: "小雪" };
+  const draft = { ...toLetterDraft(createInitialDraft("winter-moonlight")), recipientName: "小雪" };
 
   it("posts the draft with its delivery time and outbox", async () => {
     let sent: unknown = null;

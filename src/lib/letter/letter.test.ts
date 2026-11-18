@@ -15,7 +15,7 @@ function text(face: CardElement["face"], value = "Merry Christmas"): CardElement
 
 function draft(over: Partial<LetterDraft> = {}): LetterDraft {
   return {
-    templateId: "first-snow",
+    templateId: "winter-moonlight",
     paper: "cold-press",
     envelopeColor: "ivory",
     seal: { color: "red", stamp: "snowflake" },

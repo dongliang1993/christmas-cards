@@ -9,7 +9,7 @@ const AFTER = new Date("2026-12-24T00:00:00.000Z");
 const DELIVER = "2026-12-23T16:00:00.000Z";
 
 const draft: LetterDraft = {
-  templateId: "first-snow",
+  templateId: "winter-moonlight",
   paper: "kraft",
   envelopeColor: "sage",
   seal: { color: "gold", stamp: "star" },

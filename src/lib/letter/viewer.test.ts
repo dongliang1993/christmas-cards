@@ -11,7 +11,7 @@ const base: PublicLetter = {
   deliverAt: "2026-12-23T16:00:00.000Z",
   content: null,
 };
-const content = { templateId: "first-snow" as const, paper: "cold-press" as const, elements: [], audioUrl: null, audioName: null };
+const content = { templateId: "winter-moonlight" as const, paper: "cold-press" as const, elements: [], audioUrl: null, audioName: null };
 
 describe("viewerStage", () => {
   it("shows the travelling envelope before delivery", () => {

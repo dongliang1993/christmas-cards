@@ -2,15 +2,16 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "christmas-letters",
   "main": ".open-next/worker.js",
-  "compatibility_date": "2025-09-01",
+  "compatibility_date": "2026-11-18",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
+  // Served on its own subdomain; Cloudflare creates the DNS record and certificate.
+  "routes": [{ "pattern": "3dcards.theliang.com", "custom_domain": true }],
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "christmas-letters",
-      // Fill in after `wrangler d1 create christmas-letters` (see docs/deploy.md).
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "database_id": "1e9a5c2d-9ebf-4c2a-8538-294bdf4139d5",
       "migrations_dir": "migrations"
     }
   ],
