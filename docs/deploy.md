@@ -19,9 +19,13 @@ pnpm cf:deploy
 
 `*.workers.dev` 在国内无法稳定访问，朋友在微信里会打不开。
 
-1. 把域名加到 Cloudflare（Websites → Add a site），按提示改 NS。
-2. Workers & Pages → `christmas-letters` → Settings → Domains & Routes → Add → Custom domain，填例如 `letters.你的域名`。
-3. 之后发出的信件链接会用这个域名（链接取自打开页面时的地址）。
+当前线上地址：**https://3dcards.theliang.com**（2026-11-18 起）。
+
+域名写在 `wrangler.jsonc` 的 `routes` 里（`custom_domain: true`），`pnpm cf:deploy` 时 Cloudflare 自动建 DNS 记录和证书，不用去控制台手动绑。要换域名，改这一行再部署即可（域名所在的 zone 必须在同一个 Cloudflare 账号下）。
+
+之后发出的信件链接会用这个域名（链接取自打开页面时的地址）。
+
+> 注意：`pnpm cf:deploy` 会跑 `next build`，覆盖 `.next`，正在运行的 `pnpm dev` 会因此报 500。部署后重启 dev（必要时先删 `.next`）。
 
 ## 本地验证
 

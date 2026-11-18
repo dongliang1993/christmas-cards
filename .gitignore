@@ -10,15 +10,24 @@ out/
 data/
 public/uploads/
 
+# Raw source art (image-model output): the public/ build products and
+# src/lib/cards/*.layers.json layouts are tracked; keep the raw sources local.
+assets-src/
+
+# Local notes and design specs: deploy.md stays tracked.
+docs/*
+!docs/deploy.md
+
 # Misc
 .DS_Store
 *.log
+__pycache__/
 
 # TypeScript
 *.tsbuildinfo
 
 # Ryugi scratch (workspaces are recreated per spec)
-.ryugi/sdd/
+.ryugi/
 
 # Cloudflare build output
 .open-next/
