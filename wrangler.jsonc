@@ -15,5 +15,10 @@
       "migrations_dir": "migrations"
     }
   ],
-  "r2_buckets": [{ "binding": "AUDIO", "bucket_name": "christmas-letters-audio" }]
+  "r2_buckets": [
+    { "binding": "AUDIO", "bucket_name": "christmas-letters-audio" },
+    // Prerendered-page store for OpenNext's r2IncrementalCache (open-next.config.ts).
+    // Not public: only the Worker reads and writes it.
+    { "binding": "NEXT_INC_CACHE_R2_BUCKET", "bucket_name": "christmas-letters-cache" }
+  ]
 }
