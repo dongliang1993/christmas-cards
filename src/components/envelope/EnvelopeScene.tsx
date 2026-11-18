@@ -2,122 +2,202 @@
 
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
+import { PAPER_STOCKS } from "@/lib/card/paperStocks";
 import { CARD_H, CARD_W } from "@/lib/cardConstants";
-import { fitStage } from "@/lib/cardStage";
-import { buildEnvelope, buildSeal, ENV_H, ENV_W, SEAL_POS, SEAL_RADIUS } from "@/lib/envelope/envelopeModel";
+import { createPostfxStack } from "@/lib/cardPostfx";
+import { buildSurface } from "@/lib/cardRelief";
+import { cachedSurface } from "@/lib/surfaceCache";
+import { fitStage, studioBackgroundColor } from "@/lib/cardStage";
+import { buildPaperEnvelope } from "@/lib/envelope/paperEnvelope";
+import { envelopeHint, type EnvelopeMode } from "@/lib/envelope/sceneHints";
 import { initialSeal, sealPressStep, sealVisual, type SealState } from "@/lib/envelope/sealPress";
-import type { EnvelopeColor, Seal } from "@/lib/letter/model";
+import { OPEN_TIMELINE_S, openPose, SEAL_TIMELINE_S, sealPose, type EnvelopePose } from "@/lib/envelope/timeline";
+import { buildWaxSeal } from "@/lib/envelope/waxSeal";
+import type { EnvelopeColor, PaperStock, Seal } from "@/lib/letter/model";
+import {
+  addStudioEnvironment,
+  addStudioLights,
+  CARD_SHADOW_OFFSET,
+  CARD_SHADOW_PAD_X,
+  CARD_SHADOW_PAD_Y,
+  createCardShadowTexture,
+  createStudioRenderer,
+} from "@/lib/studio";
+import { changeGate } from "@/lib/envelope/changeGate";
 
-export type EnvelopeMode = "seal" | "transit" | "open";
+export type { EnvelopeMode };
 
 interface Props {
   mode: EnvelopeMode;
   envelopeColor: EnvelopeColor;
   seal: Seal;
-  recipientName: string;
-  /** Card face shown sliding in (seal) or out (open). */
+  /** The card's cover, as it slides in (seal) or out (open). */
   coverSrc: string;
-  postmark: string | null;
+  /** The card's stock, for its edges. */
+  paper?: PaperStock;
+  /** "12月24日": shown under an envelope still in transit. */
+  deliverLabel?: string | null;
+  /** Sender came back to an envelope already sealed: show it shut, no replay. */
+  startSealed?: boolean;
   onSealed?(): void;
   /** The card has left the envelope: show the card itself now. */
   onOpened?(): void;
+  /** The first frame with the card's cover on has been drawn. */
+  onFirstFrame?(): void;
 }
 
 const FOV = 30;
-const INSERT_S = 1.3;
-const FLAP_S = 0.7;
-const OUT_S = 1.0;
-/** Open flap folds back behind the envelope (positive x-rotation sends its tip to -z). */
-const FLAP_OPEN = Math.PI * 0.92;
+/** Card depth inside the envelope: thin enough for the pocket's slot. */
+const CARD_DEPTH = 0.022;
+/** Hold on the cooled seal, then the envelope settles, before moving on. */
+const SEALED_HOLD_S = 0.6;
+const SETTLE_S = 0.35;
 
 const easeOut = (t: number) => 1 - (1 - Math.min(1, Math.max(0, t))) ** 3;
-const easeInOut = (t: number) => {
-  const x = Math.min(1, Math.max(0, t));
-  return x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2;
-};
 
 function reducedMotion(): boolean {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
+function isSmallScreen(): boolean {
+  return typeof window !== "undefined" && Math.min(window.innerWidth, window.innerHeight) < 600;
+}
+
+/** The closed card as the envelope scene shows it: the cover with its relief, paper edges. */
+function buildCard(coverSrc: string, paper: PaperStock) {
+  const edge = new THREE.MeshStandardMaterial({ color: new THREE.Color(0xe6ddd1).multiply(new THREE.Color(PAPER_STOCKS[paper].tint)), roughness: 0.9 });
+  const cover = new THREE.MeshStandardMaterial({ roughness: 0.8, metalness: 0.02 });
+  const geometry = new THREE.BoxGeometry(CARD_W, CARD_H, CARD_DEPTH);
+  const mesh = new THREE.Mesh(geometry, [edge, edge, edge, edge, cover, edge]);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  // The card scene's own soft studio shadow, so the hand-off frames match.
+  const shadowTex = createCardShadowTexture();
+  const shadowMat = new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false, opacity: 1 });
+  const shadowGeo = new THREE.PlaneGeometry(CARD_W * CARD_SHADOW_PAD_X, CARD_H * CARD_SHADOW_PAD_Y);
+  const shadow = new THREE.Mesh(shadowGeo, shadowMat);
+  shadow.position.set(CARD_SHADOW_OFFSET.x, CARD_SHADOW_OFFSET.y, CARD_SHADOW_OFFSET.z);
+  mesh.add(shadow);
+  const owned: { dispose(): void }[] = [edge, cover, geometry, shadowTex, shadowMat, shadowGeo];
+  const img = new Image();
+  let cancelled = false;
+  let ready = false;
+  img.onload = () => {
+    if (cancelled) return;
+    const map = new THREE.Texture(img);
+    map.colorSpace = THREE.SRGBColorSpace;
+    map.anisotropy = 8;
+    map.needsUpdate = true;
+    // Same key as the card scene, which has usually baked this cover a moment ago.
+    const baked = cachedSurface(`${coverSrc}|1`, () => buildSurface(img, 1));
+    const normal = new THREE.CanvasTexture(baked.normal);
+    const surface = new THREE.CanvasTexture(baked.surface);
+    Object.assign(cover, { map, normalMap: normal, metalnessMap: surface, roughnessMap: surface, metalness: 1, roughness: 1 });
+    cover.needsUpdate = true;
+    owned.push(map, normal, surface);
+    ready = true;
+  };
+  img.src = coverSrc;
+  return {
+    mesh,
+    /** The cover is on: until then the card would show as a blank box. */
+    isReady: () => ready,
+    /** Fades as the card lifts off the sweep; inside the envelope it is hidden behind the paper. */
+    setShadow: (opacity: number) => {
+      shadowMat.opacity = opacity;
+    },
+    dispose() {
+      cancelled = true;
+      for (const o of owned) o.dispose();
+    },
+  };
+}
+
 /**
- * The envelope moment (spec §4.5, §5): the card slides in and the flap
- * closes; the sender presses the wax; the recipient breaks it and the card
- * slides out. In transit it only wiggles.
+ * The envelope moment (spec §4, §5, §6), shot in the card's own studio: the
+ * card drops into a paper envelope, the flap bends shut, the sender presses
+ * the wax; the recipient breaks it and the card slides back out.
  */
-export function EnvelopeScene({ mode, envelopeColor, seal, recipientName, coverSrc, postmark, onSealed, onOpened }: Props) {
+export function EnvelopeScene({ mode, envelopeColor, seal, coverSrc, paper = "cold-press", deliverLabel = null, startSealed = false, onSealed, onOpened, onFirstFrame }: Props) {
   const host = useRef<HTMLDivElement | null>(null);
   const press = useRef<(kind: "down" | "up") => void>(() => {});
-  const callbacks = useRef({ onSealed, onOpened });
-  callbacks.current = { onSealed, onOpened };
+  const callbacks = useRef({ onSealed, onOpened, onFirstFrame });
+  callbacks.current = { onSealed, onOpened, onFirstFrame };
   const [ring, setRing] = useState<{ x: number; y: number; r: number; p: number } | null>(null);
   const [hint, setHint] = useState<string | null>(null);
+  // Read once: the same envelope stays mounted from 封装 into 寄出, and sealing
+  // it must not restart it.
+  const startSealedAtMount = useRef(startSealed);
 
   useEffect(() => {
     const el = host.current;
     if (!el) return;
     const reduced = reducedMotion();
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.toneMapping = THREE.NeutralToneMapping;
+
+    const renderer = createStudioRenderer();
     renderer.localClippingEnabled = true;
+    // Absolutely placed, so a stale pixel size never props its box open while it resizes.
+    renderer.domElement.style.position = "absolute";
+    renderer.domElement.style.inset = "0";
     el.appendChild(renderer.domElement);
-
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(FOV, 1, 0.1, 50);
-    scene.add(new THREE.AmbientLight(0xfff9f5, 1.4));
-    scene.add(new THREE.HemisphereLight(0xfffaf6, 0xe0d2cc, 0.5));
-    const key = new THREE.DirectionalLight(0xfff6ee, 1.6);
-    key.position.set(-3, 4, 6);
-    scene.add(key);
+    scene.background = studioBackgroundColor();
+    const studioEnv = addStudioEnvironment(renderer, scene);
+    const { key } = addStudioLights(scene, { shadowMapSize: isSmallScreen() ? 1024 : 2048 });
+    Object.assign(key.shadow.camera, { left: -4, right: 4, top: 6.5, bottom: -5 });
+    key.shadow.camera.updateProjectionMatrix();
+    const camera = new THREE.PerspectiveCamera(FOV, 1, 0.1, 100);
+    const post = createPostfxStack(renderer, scene, camera);
 
-    const root = new THREE.Group();
-    scene.add(root);
-    const envelope = buildEnvelope(envelopeColor, { recipientName, postmark });
-    root.add(envelope.group);
-    const sealParts = buildSeal(seal);
-    sealParts.group.position.copy(SEAL_POS);
-    envelope.flapPivot.add(sealParts.group);
-    // Seal rides the flap: its local position is relative to the hinge.
-    sealParts.group.position.y = SEAL_POS.y - ENV_H / 2;
+    const envelope = buildPaperEnvelope(envelopeColor, renderer.capabilities.getMaxAnisotropy());
+    scene.add(envelope.group);
+    // Baking the wax takes a moment: do it when the press starts, or now if it starts out sealed.
+    let wax: ReturnType<typeof buildWaxSeal> | null = null;
+    const ensureWax = () => {
+      if (wax) return wax;
+      wax = buildWaxSeal(seal);
+      wax.group.position.copy(envelope.sealAt);
+      envelope.group.add(wax.group);
+      return wax;
+    };
+    const card = buildCard(coverSrc, paper);
+    scene.add(card.mesh);
 
-    const coverTex = new THREE.TextureLoader().load(coverSrc);
-    coverTex.colorSpace = THREE.SRGBColorSpace;
-    const card = new THREE.Mesh(
-      new THREE.BoxGeometry(CARD_W * 0.92, CARD_H * 0.92, 0.02),
-      [
-        ...Array.from({ length: 4 }, () => new THREE.MeshStandardMaterial({ color: "#efe7dc" })),
-        new THREE.MeshStandardMaterial({ map: coverTex, roughness: 0.8 }),
-        new THREE.MeshStandardMaterial({ color: "#efe7dc" }),
-      ],
-    );
-    card.position.z = -0.04; // between the panels: hidden by the back panel once inside
-    root.add(card);
-
+    let stage = fitStage(CARD_W, CARD_H, FOV, 1, 0);
     const resize = () => {
       const w = el.clientWidth || 1;
       const h = el.clientHeight || 1;
       renderer.setSize(w, h);
+      post.setSize(w, h);
       camera.aspect = w / h;
-      const fit = fitStage(ENV_W, ENV_H, FOV, w / h);
-      // Leave headroom above the envelope for the card sliding in and out.
-      camera.position.set(0, fit.camYPerZ * fit.closedZ * 0.4, fit.closedZ * 1.18);
       camera.updateProjectionMatrix();
+      stage = fitStage(CARD_W, CARD_H, FOV, w / h, 0);
     };
     const observer = new ResizeObserver(resize);
     observer.observe(el);
     resize();
 
-    let sealState: SealState = initialSeal(mode === "seal" ? "idle" : "sealed");
-    let elapsed = 0;
-    let phaseStart = 0;
-    let phase: "inserting" | "closing" | "ready" | "flapOpen" | "cardOut" | "done" = mode === "seal" ? "inserting" : "ready";
+    const startsSealed = startSealedAtMount.current;
+    const sealed = mode !== "seal" || startsSealed;
+    if (sealed) ensureWax();
+    let sealState: SealState = initialSeal(sealed ? "sealed" : "idle");
+    // Sequence time: the sender's runs from the card; the recipient's waits on the seal.
+    let t = mode === "seal" && (startsSealed || reduced) ? SEAL_TIMELINE_S : 0;
+    let opening = false;
+    // Starting sealed means the dip already happened: never replay it.
+    let sealedFor = startsSealed ? SEALED_HOLD_S + SETTLE_S + 1 : -1;
+    const spreadChanged = changeGate();
+    let firstFrameFired = false;
+    let sealedFired = startsSealed;
+    let openedFired = false;
     let wiggle = 0;
-    let sealedFired = false;
+    let elapsed = 0;
     let lastHint: string | null = null;
 
     press.current = (kind) => {
-      if (mode === "seal" && phase === "ready") {
+      const ready = mode !== "seal" || sealPose(t).phase === "ready";
+      if (mode === "seal" && ready) {
+        if (kind === "down") ensureWax();
         sealState = sealPressStep(sealState, { type: kind === "down" ? "press" : "release" }, reduced);
       } else if (mode === "open" && kind === "down" && sealState.stage === "sealed") {
         sealState = sealPressStep(sealState, { type: "break" }, reduced);
@@ -126,98 +206,112 @@ export function EnvelopeScene({ mode, envelopeColor, seal, recipientName, coverS
       }
     };
 
+    const look = new THREE.Vector3();
     const sealWorld = new THREE.Vector3();
+    const applyPose = (pose: EnvelopePose) => {
+      envelope.group.position.y = pose.envelope.y;
+      envelope.setFold(pose.flapFold);
+      card.mesh.position.set(pose.card.x, pose.card.y, pose.card.z);
+      card.mesh.rotation.set(pose.card.rotX, pose.card.rotY, pose.card.rotZ);
+      // Head-on (oblique 0) is exactly the card scene's camera; oblique swings a little right and up.
+      const z = stage.closedZ * pose.camera.distance;
+      const ob = pose.camera.oblique;
+      look.set(0, pose.camera.lookY + stage.camYPerZ * z * (1 - ob), 0);
+      camera.position.set(look.x + ob * 0.07 * z, look.y - ob * 0.065 * z, z);
+      camera.lookAt(look);
+    };
+
     let frame = 0;
     let last = performance.now();
     const loop = (now: number) => {
       frame = requestAnimationFrame(loop);
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
+      // Hold everything until the cover is on, so the first frame is the card itself.
+      if (!card.isReady()) return;
       elapsed += dt;
-      const inPhase = (elapsed - phaseStart) / (reduced ? 0.01 : 1);
-      const go = (next: typeof phase) => {
-        phase = next;
-        phaseStart = elapsed;
-      };
 
-      // Card and flap choreography.
-      const cardTop = ENV_H * 0.62;
-      if (phase === "inserting") {
-        envelope.flapPivot.rotation.x = FLAP_OPEN;
-        card.position.y = cardTop * (1 - easeInOut(inPhase / INSERT_S)) - 0.15;
-        if (inPhase >= INSERT_S) go("closing");
-      } else if (phase === "closing") {
-        envelope.flapPivot.rotation.x = FLAP_OPEN * (1 - easeOut(inPhase / FLAP_S));
-        if (inPhase >= FLAP_S) go("ready");
-      } else if (phase === "flapOpen") {
-        envelope.flapPivot.rotation.x = FLAP_OPEN * easeOut(inPhase / FLAP_S);
-        if (inPhase >= FLAP_S) go("cardOut");
-      } else if (phase === "cardOut") {
-        card.position.y = -0.15 + (cardTop + 1.2) * easeInOut(inPhase / OUT_S);
-        if (inPhase >= OUT_S) {
-          go("done");
-          callbacks.current.onOpened?.();
-        }
-      } else if (phase === "ready" && mode !== "seal") {
-        card.position.y = -0.15;
+      // The sequence.
+      let pose: EnvelopePose;
+      if (mode === "seal") {
+        t = Math.min(SEAL_TIMELINE_S, t + dt);
+        pose = sealPose(t);
+      } else {
+        if (opening) t = Math.min(OPEN_TIMELINE_S, t + (reduced ? OPEN_TIMELINE_S : dt));
+        pose = openPose(t);
+        card.mesh.visible = opening;
       }
-
-      // An open flap swings back behind the card it lets through.
-      envelope.flapPivot.position.z = -0.07 * (envelope.flapPivot.rotation.x / FLAP_OPEN);
 
       // Wax.
       sealState = sealPressStep(sealState, { type: "tick", dt: dt * 1000 }, reduced);
       const v = sealVisual(sealState);
-      const blob = sealState.stage === "idle" ? 0 : 0.28 * v.press + 0.72 * easeOut(v.spread);
-      sealParts.group.visible = blob > 0.01;
-      sealParts.group.scale.set(blob, blob, 0.4 + 0.6 * easeOut(v.spread));
-      for (const m of sealParts.material) {
-        m.emissiveIntensity = (1 - v.cool) * 0.9 * (sealState.stage === "idle" ? 0 : 1);
-        m.roughness = 0.12 + 0.3 * v.cool;
-        m.opacity = 1 - Math.max(0, v.crack - 0.5) * 2;
+      const spread = sealState.stage === "idle" ? 0 : sealState.stage === "pressing" ? 0.25 * v.press : 0.25 + 0.75 * easeOut(v.spread);
+      if (wax) {
+        wax.group.visible = spread > 0.01 && v.crack < 1;
+        const target = sealState.stage === "sealed" || sealState.stage === "breaking" ? 1 : spread;
+        if (wax.group.visible && spreadChanged(target)) wax.setSpread(target);
+        for (const m of wax.material) {
+          m.emissiveIntensity = sealState.stage === "idle" ? 0 : (1 - v.cool) * 0.9;
+          m.opacity = 1 - Math.max(0, v.crack - 0.5) * 2;
+        }
+        const split = 0.06 * easeOut(v.crack);
+        const fall = 1.8 * v.crack * v.crack;
+        wax.halves[0].position.set(-split, -fall, 0);
+        wax.halves[1].position.set(split, -fall * 0.8, 0);
+        wax.halves[0].rotation.z = 0.5 * v.crack;
+        wax.halves[1].rotation.z = -0.4 * v.crack;
+        wax.group.getWorldPosition(sealWorld);
+        wax.planes[0].constant = sealWorld.x;
+        wax.planes[1].constant = -sealWorld.x;
       }
-      const spread = 0.35 * easeOut(v.crack);
-      const fall = 1.8 * v.crack * v.crack;
-      sealParts.halves[0].position.set(-spread, -fall, 0);
-      sealParts.halves[1].position.set(spread, -fall * 0.8, 0);
-      sealParts.group.getWorldPosition(sealWorld);
-      sealParts.planes[0].constant = sealWorld.x - spread * blob;
-      sealParts.planes[1].constant = -(sealWorld.x + spread * blob);
 
-      if (sealState.stage === "sealed" && mode === "seal" && !sealedFired) {
-        sealedFired = true;
-        callbacks.current.onSealed?.();
+      // Sealed: hold, let the envelope settle, then hand on.
+      let settle = 0;
+      if (mode === "seal" && sealState.stage === "sealed") {
+        if (sealedFor < 0) sealedFor = 0;
+        sealedFor += dt;
+        const s = (sealedFor - SEALED_HOLD_S) / SETTLE_S;
+        if (s > 0 && s < 1) settle = -0.04 * Math.sin(Math.PI * s);
+        if (!sealedFired && s >= 1) {
+          sealedFired = true;
+          callbacks.current.onSealed?.();
+        }
       }
-      if (sealState.stage === "broken" && phase === "ready" && mode === "open") go("flapOpen");
+      if (mode === "open" && sealState.stage === "broken" && !opening) {
+        opening = true;
+        t = 0;
+      }
+      if (opening && !openedFired && t >= OPEN_TIMELINE_S) {
+        openedFired = true;
+        callbacks.current.onOpened?.();
+      }
 
-      // Transit wiggle and a slow idle breath.
+      applyPose(pose);
+      card.setShadow(Math.min(1, Math.max(0, 1 - pose.card.z / 0.3)));
       wiggle = Math.max(0, wiggle - dt * 1.6);
-      root.rotation.z = Math.sin(elapsed * 22) * 0.05 * wiggle + Math.sin(elapsed * 0.8) * 0.004;
-      root.position.y = Math.sin(elapsed * 1.1) * 0.015;
+      envelope.group.rotation.z = Math.sin(elapsed * 22) * 0.04 * wiggle;
+      envelope.group.position.y += settle + (mode === "transit" ? Math.sin(elapsed * 1.1) * 0.015 : 0);
 
-      renderer.render(scene, camera);
+      post.render(dt);
+      if (!firstFrameFired) {
+        firstFrameFired = true;
+        callbacks.current.onFirstFrame?.();
+      }
 
-      // DOM overlay: hold ring around the seal spot, and the hint line.
+      // DOM overlay: the hold ring round the seal spot, and the hint.
+      const ready = mode !== "seal" || pose.phase === "ready";
       const rect = el.getBoundingClientRect();
-      const p = SEAL_POS.clone().project(camera);
-      const edge = SEAL_POS.clone().add(new THREE.Vector3(SEAL_RADIUS * 1.5, 0, 0)).project(camera);
-      const r = Math.abs(edge.x - p.x) * rect.width * 0.5;
+      const spot = envelope.sealAt.clone();
+      envelope.group.localToWorld(spot);
+      const p = spot.clone().project(camera);
+      const edge = spot.clone().add(new THREE.Vector3(0.36, 0, 0)).project(camera);
       const pressing = sealState.stage === "pressing";
       setRing(
-        mode === "seal" && phase === "ready" && (sealState.stage === "idle" || pressing)
-          ? { x: ((p.x + 1) / 2) * rect.width, y: ((1 - p.y) / 2) * rect.height, r, p: v.press }
+        mode === "seal" && ready && (sealState.stage === "idle" || pressing)
+          ? { x: ((p.x + 1) / 2) * rect.width, y: ((1 - p.y) / 2) * rect.height, r: Math.abs(edge.x - p.x) * rect.width * 0.5, p: v.press }
           : null,
       );
-      const nextHint =
-        mode === "seal"
-          ? phase === "ready" && sealState.stage === "idle"
-            ? "按住火漆处 1 秒，盖上印章"
-            : null
-          : mode === "open"
-            ? sealState.stage === "sealed"
-              ? "点一下火漆，拆开这封信"
-              : null
-            : "这封信还在路上";
+      const nextHint = envelopeHint({ mode, stage: sealState.stage, ready, deliverLabel });
       if (nextHint !== lastHint) {
         lastHint = nextHint;
         setHint(nextHint);
@@ -229,15 +323,16 @@ export function EnvelopeScene({ mode, envelopeColor, seal, recipientName, coverS
       cancelAnimationFrame(frame);
       observer.disconnect();
       envelope.dispose();
-      sealParts.dispose();
-      card.geometry.dispose();
-      for (const m of card.material as THREE.Material[]) m.dispose();
-      coverTex.dispose();
+      wax?.dispose();
+      card.dispose();
+      post.dispose();
+      key.shadow.dispose();
+      studioEnv.dispose();
       renderer.dispose();
       renderer.domElement.remove();
       press.current = () => {};
     };
-  }, [mode, envelopeColor, seal, recipientName, coverSrc, postmark]);
+  }, [mode, envelopeColor, seal, coverSrc, paper, deliverLabel]);
 
   return (
     <div

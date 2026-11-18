@@ -12,7 +12,7 @@ const DAY = 86_400_000;
 
 function body(deliverAt: string) {
   return {
-    templateId: "first-snow",
+    templateId: "winter-moonlight",
     paper: "cold-press",
     envelopeColor: "ivory",
     seal: { color: "red", stamp: "holly" },
