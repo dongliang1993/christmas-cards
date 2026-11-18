@@ -1,0 +1,46 @@
+import { z } from "zod";
+
+/**
+ * The prebaked-asset manifest (`baked/manifest.json` next to a card's art).
+ * Read at runtime to prime the surface cache, written by the dev baker. File
+ * names are validated as plain lowercase .webp names so a tampered manifest
+ * can never point the loader at another path or origin.
+ */
+const fileName = z
+  .string()
+  .regex(/^[a-z0-9][a-z0-9-]*\.webp$/, "expected a plain lowercase .webp file name");
+
+const surfaceEntrySchema = z.object({
+  key: z.string().min(1),
+  name: z.string().min(1),
+  normal: fileName,
+  surface: fileName,
+});
+
+const canvasEntrySchema = z.object({
+  key: z.string().min(1),
+  name: z.string().min(1),
+  src: fileName,
+});
+
+export const prebakedEntrySchema = z.union([surfaceEntrySchema, canvasEntrySchema]);
+
+export const prebakedManifestSchema = z.object({
+  version: z.literal(1),
+  card: z.string().min(1),
+  entries: z.array(prebakedEntrySchema),
+});
+
+export type PrebakedEntry = z.infer<typeof prebakedEntrySchema>;
+export type PrebakedManifest = z.infer<typeof prebakedManifestSchema>;
+
+export interface ParsedPrebakedManifest extends PrebakedManifest {
+  byKey: Map<string, PrebakedEntry>;
+}
+
+export function parsePrebakedManifest(json: unknown): ParsedPrebakedManifest {
+  const manifest = prebakedManifestSchema.parse(json);
+  const byKey = new Map<string, PrebakedEntry>();
+  for (const entry of manifest.entries) byKey.set(entry.key, entry);
+  return { ...manifest, byKey };
+}
