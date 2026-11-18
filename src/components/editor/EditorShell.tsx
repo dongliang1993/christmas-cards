@@ -2,25 +2,28 @@
 
 import { useEffect, useRef, useState, type Dispatch } from "react";
 import { nanoid } from "nanoid";
-import { ChevronLeft, ChevronRight, Eye, EyeOff, LayoutTemplate, Redo2, Sticker, Type, Undo2, ZoomIn, ZoomOut, FileText } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight, Eye, EyeOff, LayoutTemplate, Music, Redo2, Sticker, Type, Undo2, ZoomIn, ZoomOut, FileText } from "lucide-react";
 import type { CardHandle } from "@/components/ChristmasCard3D";
 import type { EditorAction, EditorState } from "@/lib/editor/editorState";
 import { PAGES, pageLabel, stepZoom, ZOOM_MAX, ZOOM_MIN, type PageId } from "@/lib/editor/pages";
 import type { FontId, Ink } from "@/lib/letter/model";
+import { playSwipe } from "@/lib/sfx";
 import type { CardTemplateId } from "@/lib/types";
 import { CardEditor } from "./CardEditor";
 import { ContextPanel, TOOL_LABELS, type Tool } from "./ContextPanel";
 
 const TOOLS: { id: Tool; icon: typeof Sticker }[] = [
   { id: "style", icon: LayoutTemplate },
+  { id: "paper", icon: FileText },
   { id: "stickers", icon: Sticker },
   { id: "text", icon: Type },
-  { id: "paper", icon: FileText },
 ];
 
 interface Props {
   state: EditorState;
   dispatch: Dispatch<EditorAction>;
+  /** Where the editor opens. From the gallery it starts on the style picker. */
+  initialTool?: Tool;
 }
 
 function IconButton(props: { label: string; onClick(): void; disabled?: boolean; active?: boolean; children: React.ReactNode }) {
@@ -43,10 +46,10 @@ function IconButton(props: { label: string; onClick(): void; disabled?: boolean;
  * 做卡 step (spec §13.2): tool rail · canvas with page nav · context panel,
  * with zoom / undo / redo / preview underneath. Preview keeps the same pages.
  */
-export function EditorShell({ state, dispatch }: Props) {
+export function EditorShell({ state, dispatch, initialTool = "stickers" }: Props) {
   const card = useRef<CardHandle | null>(null);
-  const [tool, setTool] = useState<Tool>("stickers");
-  const [page, setPage] = useState<PageId>("inside");
+  const [tool, setTool] = useState<Tool>(initialTool);
+  const [page, setPage] = useState<PageId>(initialTool === "style" ? "cover" : "inside");
   const [zoom, setZoom] = useState(1);
   const [preview, setPreview] = useState(false);
   const [freshText, setFreshText] = useState<string | null>(null);
@@ -64,30 +67,41 @@ export function EditorShell({ state, dispatch }: Props) {
   }, []);
   const pageIndex = PAGES.indexOf(page);
 
-  const goInside = () => setPage("inside");
+  const goPage = (next: PageId) => {
+    if (next === page) return;
+    setPage(next);
+    // A new page has its own things on it; start with none selected (spec P0-04).
+    dispatch({ type: "select", uid: null });
+  };
   const pickTool = (t: Tool) => {
     setSheet(tool === t ? !sheetOpen : true);
     setTool(t);
     dispatch({ type: "select", uid: null });
-    if (t !== "style" && t !== "paper") goInside();
+    // Style is about the cover; everything else is placed on the inside.
+    goPage(t === "style" ? "cover" : "inside");
   };
 
   const addSticker = (id: string, drop?: { clientX: number; clientY: number }) => {
-    goInside();
+    goPage("inside");
     const at = drop ? card.current?.pick(drop.clientX, drop.clientY) : null;
     if (drop && !at) return; // dropped off the pages
     dispatch({ type: "add-sticker", stickerId: id, face: at?.face ?? state.focusFace, uid: nanoid(8), at: at ? { x: at.x, y: at.y } : undefined });
   };
   const addText = (p: { text: string; font: FontId; ink: Ink }) => {
-    goInside();
+    goPage("inside");
     const uid = nanoid(8);
     dispatch({ type: "add-text", face: state.focusFace, uid, x: 0.5, y: 0.5, ...p });
     setFreshText(uid);
   };
   const changeTemplate = (id: CardTemplateId) => {
-    dispatch({ type: "set", patch: { templateId: id } });
-    setPage("cover"); // show the new cover
+    if (id !== state.draft.templateId) playSwipe("switch");
+    dispatch({ type: "set-template", templateId: id });
   };
+
+  const TOOLS_WITH_MUSIC: { id: Tool | "music"; icon: typeof Sticker; label: string }[] = [
+    ...TOOLS.map((t) => ({ id: t.id as Tool | "music", icon: t.icon, label: TOOL_LABELS[t.id] })),
+    { id: "music", icon: Music, label: "音乐" },
+  ];
 
   return (
     <div className="flex h-full flex-col">
@@ -95,20 +109,20 @@ export function EditorShell({ state, dispatch }: Props) {
         {!preview && (
           <nav
             aria-label="编辑工具"
-            className="order-3 flex w-full shrink-0 flex-row justify-around gap-1 border-t border-stone-200/70 px-2 py-1.5 lg:order-none lg:w-16 lg:flex-col lg:justify-start lg:border-r lg:border-t-0 lg:px-0 lg:py-3"
+            className="order-3 flex w-full shrink-0 flex-row justify-around gap-1 border-t border-stone-200/70 px-2 py-1.5 lg:order-none lg:w-16 lg:flex-col lg:items-center lg:justify-start lg:border-r lg:border-t-0 lg:px-0 lg:py-3"
           >
-            {TOOLS.map(({ id, icon: Icon }) => {
+            {TOOLS_WITH_MUSIC.map(({ id, icon: Icon, label }) => {
               const active = tool === id && !state.selected && (sheetOpen || desktop);
               return (
                 <button
                   key={id}
                   type="button"
-                  onClick={() => pickTool(id)}
+                  onClick={() => pickTool(id as Tool)}
                   aria-pressed={active}
                   className={`flex w-12 flex-col items-center gap-1 rounded-xl py-2 text-[11px] transition ${active ? "bg-stone-900 text-white" : "text-stone-600 hover:bg-stone-100"}`}
                 >
                   <Icon className="h-5 w-5" />
-                  {TOOL_LABELS[id]}
+                  {label}
                 </button>
               );
             })}
@@ -117,15 +131,21 @@ export function EditorShell({ state, dispatch }: Props) {
 
         <div className="relative order-1 flex min-h-0 min-w-0 flex-1 flex-col lg:order-none">
           <div className="relative min-h-0 flex-1">
-            <CardEditor state={state} dispatch={dispatch} paper={state.draft.paper} page={page} zoom={zoom} preview={preview} onPage={setPage} card={card} />
+            <CardEditor state={state} dispatch={dispatch} paper={state.draft.paper} page={page} zoom={zoom} preview={preview} locked={tool === "style"} onPage={goPage} card={card} />
           </div>
           <div className="flex shrink-0 items-center justify-center gap-3 pb-2 text-xs text-stone-500">
-            <IconButton label="上一页" disabled={pageIndex === 0} onClick={() => setPage(PAGES[pageIndex - 1])}>
+            <IconButton label="上一页" disabled={pageIndex === 0} onClick={() => goPage(PAGES[pageIndex - 1])}>
               <ChevronLeft className="h-4 w-4" />
             </IconButton>
             <span className="min-w-20 text-center tabular-nums">{pageLabel(page)}</span>
-            <IconButton label="下一页" disabled={pageIndex === PAGES.length - 1} onClick={() => setPage(PAGES[pageIndex + 1])}>
+            <IconButton label="下一页" disabled={pageIndex === PAGES.length - 1} onClick={() => goPage(PAGES[pageIndex + 1])}>
               <ChevronRight className="h-4 w-4" />
+            </IconButton>
+            <IconButton
+              label={page === "inside" ? "合上贺卡" : "翻开贺卡"}
+              onClick={() => goPage(page === "inside" ? "cover" : "inside")}
+            >
+              <BookOpen className="h-4 w-4" />
             </IconButton>
           </div>
         </div>
