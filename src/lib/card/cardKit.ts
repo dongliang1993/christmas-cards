@@ -400,37 +400,70 @@ export function sheetText(message: string, signature: string): string {
   return `${message}\u0000${signature}`;
 }
 
-/** Build a card's inside. Resolves null when `isCancelled` turns true while decoding. */
+/**
+ * Build a card's inside. Each page is a canvas drawn on the main thread
+ * (tens of ms); `pace` runs between them, so a caller can give each its own
+ * frame. Resolves null when `isCancelled` turns true along the way.
+ */
 export async function buildInside(
   ctx: KitContext,
   src: InsideSources,
   isCancelled: () => boolean,
+  pace: () => Promise<void> = async () => undefined,
 ): Promise<CardInside | null> {
   const { templateId, coverImg, bare } = src;
   const spec = CARD_ASSETS[templateId];
   const bakes = cardBakes(templateId, coverImg);
   const up = await decoder(bare ? [] : [...surfaceImages(bakes.leftStickers), ...surfaceImages(bakes.sheetStickers)]);
-  if (isCancelled()) return null;
   const upSurface = (s: CoverSurface): CoverSurface => ({ normal: up(s.normal), surface: up(s.surface) });
   const aniso = ctx.maxAnisotropy;
+  const made: THREE.Texture[] = [];
+  /** One page per step; a cancelled build frees what it already made. */
+  const step = async <T,>(make: () => T, textures: (t: T) => THREE.Texture[]): Promise<T | null> => {
+    await pace();
+    if (isCancelled()) {
+      for (const t of made) t.dispose();
+      return null;
+    }
+    const value = make();
+    made.push(...textures(value));
+    return value;
+  };
+  const one = (t: THREE.Texture) => [t];
+  const leftMap = await step(
+    () =>
+      makeTexture(
+        bare ? createInsideLeftCanvas(templateId, null, []) : createInsideLeftCanvas(templateId, coverImg, spec.motifs.left),
+        aniso,
+      ),
+    one,
+  );
+  if (!leftMap) return null;
+  const rightBaseMap = await step(() => makeTexture(createInsideRightBaseCanvas(templateId), aniso), one);
+  if (!rightBaseMap) return null;
+  const backMap = await step(() => makeTexture(createBackCanvas(templateId, coverImg, spec.motifs.back), aniso), one);
+  if (!backMap) return null;
+  const sheet = await step(
+    () =>
+      bare
+        ? { map: makeTexture(createBlankSheetCanvas(templateId), aniso), text: "" }
+        : {
+            map: makeTexture(
+              createInsideRightSheetCanvas(templateId, src.message, src.signature, coverImg, spec.motifs.insert),
+              aniso,
+            ),
+            text: sheetText(src.message, src.signature),
+          },
+    (v) => [v.map],
+  );
+  if (!sheet) return null;
   return {
     templateId,
     coverImg,
-    leftMap: makeTexture(
-      bare ? createInsideLeftCanvas(templateId, null, []) : createInsideLeftCanvas(templateId, coverImg, spec.motifs.left),
-      aniso,
-    ),
-    rightBaseMap: makeTexture(createInsideRightBaseCanvas(templateId), aniso),
-    backMap: makeTexture(createBackCanvas(templateId, coverImg, spec.motifs.back), aniso),
-    sheet: bare
-      ? { map: makeTexture(createBlankSheetCanvas(templateId), aniso), text: "" }
-      : {
-          map: makeTexture(
-            createInsideRightSheetCanvas(templateId, src.message, src.signature, coverImg, spec.motifs.insert),
-            aniso,
-          ),
-          text: sheetText(src.message, src.signature),
-        },
+    leftMap,
+    rightBaseMap,
+    backMap,
+    sheet,
     // Template stickers get the same paint relief + gloss as the cover, so the
     // pointer lamp glints on them once the card is open. Text stays flat ink.
     leftRelief: bare ? null : surfaceTextures(upSurface(bakes.leftStickers), aniso),

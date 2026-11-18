@@ -1,9 +1,12 @@
 /**
  * Baking a cover's relief takes a few hundred milliseconds. The card and the
  * envelope show the same cover back to back, so bake it once per page.
- * Bounded: each template's cover, snow mask and sticker bakes, plus paper-cut layers.
+ * Bounded: each template's cover, snow mask and sticker bakes, plus paper-cut
+ * layers (~18 keys per paper-cut card). Room for a whole gallery: an evicted
+ * prebaked surface is re-baked on the main thread (hundreds of ms) the next
+ * time its card is built.
  */
-const MAX = 64;
+const MAX = 256;
 const cache = new Map<string, unknown>();
 const waiters = new Map<string, Set<(value: unknown) => void>>();
 

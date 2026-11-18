@@ -1,6 +1,9 @@
 import * as THREE from "three";
 import { CARD_ASSETS } from "../cardAssets";
-import { captureBendBuffers, type BendBuffers } from "../cardBend";
+import { applyBow, BOW_AMP, captureBendBuffers, OPEN_MAX, type BendBuffers } from "../cardBend";
+import { LAYOUT_SPRING, stepHinge, stepSpring, type Spring } from "../cardMotion";
+import { shadowFootprint } from "../cardStage";
+import { paperTintOf } from "./paperStocks";
 import { CARD_H, CARD_THICKNESS, CARD_W, SHEET_H, SHEET_THICKNESS, SHEET_W } from "../cardConstants";
 import { GLOW_HDR, GLOW_SIZE } from "../cardGlow";
 import { createCardSnow } from "../cardSnow";
@@ -85,6 +88,17 @@ export interface CardBody {
   inside: CardInside | null;
   live: { spec: LiveSpec; rt: LiveRuntime } | null;
   liftedMeshes: RuntimeLiftedMesh[];
+  /** The cover's hinge (rad) and the slide to centre (0 shut .. 1 open), as springs. */
+  hinge: Spring;
+  layout: Spring;
+  /**
+   * Step the hinge and the slide toward `open` (0..1): swing the cover, bow
+   * the paper, shade the inside, slide to centre, fit the shadow. Returns
+   * how open it is (0..1) and the cover's bend.
+   */
+  stepOpen(dt: number, open: number, motion: number): { open: number; bend: number };
+  /** Take the face off (its pieces leave with it). */
+  clearFace(): void;
   /** Point the candle, the snow and the living parts at a card. */
   setCard(templateId: CardTemplateId): void;
   /** Put a face on (its pieces move here). Nothing is freed: faces are cached. */
@@ -153,7 +167,7 @@ function placeholderInside(mats: BodyMaterials, ph: NonNullable<BodyContext["pla
   putSurface(mats.insideRightSheet, ph);
 }
 
-export function createCardBody(ctx: BodyContext): CardBody {
+export function createCardBody(ctx: BodyContext, startOpen = false): CardBody {
   const outer = new THREE.Group();
   const center = new THREE.Group();
   outer.add(center);
@@ -232,6 +246,9 @@ export function createCardBody(ctx: BodyContext): CardBody {
   if (ctx.placeholders) placeholderInside(mats, ctx.placeholders);
 
   const edgeBase = edge.color.clone();
+  // NaN: the first stepOpen always lays the card out.
+  let lastBend = Number.NaN;
+  let lastAngle = Number.NaN;
   const body: CardBody = {
     outer,
     center,
@@ -250,6 +267,45 @@ export function createCardBody(ctx: BodyContext): CardBody {
     inside: null,
     live: null,
     liftedMeshes: [],
+    hinge: { x: startOpen ? OPEN_MAX : 0, v: 0 },
+    layout: { x: startOpen ? 1 : 0, v: 0 },
+    stepOpen(dt, open, motion) {
+      const wasStill = body.hinge.v === 0 && body.layout.v === 0;
+      body.hinge = stepHinge(body.hinge, open * OPEN_MAX, dt);
+      body.layout = stepSpring(body.layout, open > 0.5 ? 1 : 0, LAYOUT_SPRING, dt);
+      const angle = body.hinge.x;
+      const progress = THREE.MathUtils.clamp(angle / OPEN_MAX, 0, 1);
+      // Bow the cover: peak curvature near mid-turn, straight when shut/open.
+      const bowMix = Math.sin(Math.min(Math.PI, angle / OPEN_MAX) * Math.PI);
+      const bend = BOW_AMP * bowMix * motion;
+      // A shut card at rest needs none of this every frame.
+      if (wasStill && bend === 0 && lastBend === 0 && angle === lastAngle) return { open: progress, bend };
+      lastBend = bend;
+      lastAngle = angle;
+      frontPivot.rotation.y = -angle;
+      applyBow(frontGeo, CARD_W, bend, body.bends.cover);
+      for (const lm of body.liftedMeshes) applyBow(lm.geometry, CARD_W, bend, lm.bend);
+      applyBow(rightGeo, CARD_W, bend * 0.35, body.bends.right);
+      applyBow(sheetGeo, CARD_W, bend * 0.35, body.bends.sheet);
+      // The cover shades the inside as it swings.
+      const shade = 1 - 0.45 * bowMix;
+      mats.insideLeft.color.copy(paperTintOf(mats.insideLeft)).multiplyScalar(shade);
+      mats.insideRightBase.color.copy(paperTintOf(mats.insideRightBase)).multiplyScalar(1 - 0.28 * (1 - shade));
+      // The card glides to centre while the cover swings, both ways.
+      center.position.x = (-CARD_W / 2) * (1 - body.layout.x);
+      // Follow what actually casts the shadow: a cover mid-swing throws none
+      // to the left of the spine. The soft padding keeps its width.
+      const foot = shadowFootprint(angle, CARD_W);
+      const footW = foot.right - foot.left;
+      shadowPlane.position.x = center.position.x + (foot.left + foot.right) / 2 + CARD_SHADOW_OFFSET.x;
+      shadowPlane.scale.set((footW + CARD_W * (CARD_SHADOW_PAD_X - 1)) / (CARD_W * CARD_SHADOW_PAD_X), 1, 1);
+      return { open: progress, bend };
+    },
+    clearFace() {
+      for (const lm of body.liftedMeshes) lm.mesh.removeFromParent();
+      body.liftedMeshes = [];
+      body.face = null;
+    },
     setCard(templateId) {
       body.templateId = templateId;
       const spec = CARD_ASSETS[templateId];

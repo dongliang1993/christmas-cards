@@ -43,6 +43,22 @@ export interface HandRig {
   release(vxPx: number, stepPx: number): void;
   /** Offset from the front (rounded) of the stand-in under the ray, or null. */
   pick(ray: THREE.Raycaster): number | null;
+  /** How many slots the hand has (a short hand deals its cards twice). */
+  slotCount(): number;
+  /** The hand's position: the fractional slot at the front. */
+  position(): number;
+  /** The slot the hand is heading for (or resting on). */
+  targetSlot(): number;
+  /** The card a slot shows. */
+  slotCard(slot: number): CardTemplateId;
+  /**
+   * A slot's pose this frame (after update): the object a real card follows,
+   * its offset from the front, the fan's shade and its stand-in's shadow
+   * strength, and the slot's flicker phase.
+   */
+  slotFrame(slot: number): { object: THREE.Object3D; offset: number; light: number; shadow: number; seed: number };
+  /** Slots a real card stands in for: their stand-ins hide. */
+  setBodied(slots: ReadonlySet<number>): void;
   dispose(): void;
 }
 
@@ -251,6 +267,9 @@ export function createHandRig(opts: {
   let swayAmp = 1;
   let elapsed = 0;
   let frontShown = true;
+  let bodied: ReadonlySet<number> = new Set();
+  const offsets = new Float32Array(slots);
+  const lights = new Float32Array(slots).fill(1);
   // Hidden until the first card is ready, then dealt in.
   group.visible = false;
 
@@ -278,7 +297,7 @@ export function createHandRig(opts: {
         // The front settles into the real card's resting pose; it does not sway.
         const front = Math.max(0, 1 - 2 * Math.abs(o));
         const w = sway(elapsed, s.seed, swayAmp * motion * 0.5 * (1 - front));
-        s.group.visible = p.opacity > 0 && (front < 0.99 || frontShown);
+        s.group.visible = p.opacity > 0 && !bodied.has(i) && (front < 0.99 || frontShown);
         s.group.position.set(p.x, p.y + w.y, p.z);
         s.group.rotation.set(
           w.rx + FRONT_REST.rx * front,
@@ -290,6 +309,8 @@ export function createHandRig(opts: {
         s.edge.color.setRGB(0.9 * p.light, 0.866 * p.light, 0.82 * p.light);
         // Far cards cast fainter studio shadows, or they pile up into a grey band under the arc.
         s.shadow.material.opacity = 0.7 * Math.max(0.25, 1 - 0.4 * Math.abs(o));
+        offsets[i] = o;
+        lights[i] = p.light;
         // Nearer to the front draws later, so the front card always lies on top.
         s.card.renderOrder = 10 - Math.abs(o);
         s.snow.renderOrder = s.card.renderOrder + 0.1;
@@ -312,6 +333,23 @@ export function createHandRig(opts: {
     settled: () => !dragging && Math.abs(deal.x - target) < 0.01 && Math.abs(deal.v) < 0.05,
     showFront(show) {
       frontShown = show;
+    },
+    slotCount: () => slots,
+    position: () => deal.x,
+    targetSlot: () => ((Math.round(target) % slots) + slots) % slots,
+    slotCard: (slot) => templateIds[slot % n],
+    slotFrame(slot) {
+      const s = slotList[slot];
+      return {
+        object: s.group,
+        offset: offsets[slot],
+        light: lights[slot],
+        shadow: s.shadow.material.opacity,
+        seed: s.seed,
+      };
+    },
+    setBodied(next) {
+      bodied = next;
     },
     goTo(index) {
       const cur = indexOf(target);

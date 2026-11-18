@@ -80,3 +80,17 @@ describe("whenSurface: stand-ins wait for a surface without baking", () => {
     expect(seen).toEqual([]);
   });
 });
+
+describe("surfaceCache capacity: a whole gallery of paper-cut cards stays primed", () => {
+  it("keeps the first card's prebaked surfaces after four cards' worth of keys", () => {
+    // Four paper-cut cards: cover, snow, two sticker reliefs, base and ~13 pieces each.
+    const keys = Array.from({ length: 4 * 18 }, (_, i) => `capacity|card${Math.floor(i / 18)}|${i % 18}`);
+    for (const k of keys) primeSurface(k, k);
+    let rebakes = 0;
+    cachedSurface(keys[0], () => {
+      rebakes += 1;
+      return "rebaked";
+    });
+    expect(rebakes).toBe(0);
+  });
+});

@@ -6,9 +6,9 @@ import { CARD_ASSETS } from "@/lib/cardAssets";
 import { CARD_H, CARD_THICKNESS, CARD_W } from "@/lib/cardConstants";
 import { createElementLayer, type ElementLayer, type LayerElement } from "@/lib/card/elementMeshes";
 import { localToPlacement, placementToLocal } from "@/lib/card/elementLayout";
-import { applyPaperStock, paperTintOf } from "@/lib/card/paperStocks";
+import { applyPaperStock } from "@/lib/card/paperStocks";
 import type { Face, PaperStock } from "@/lib/letter/model";
-import { applyBow, BOW_AMP, OPEN_MAX } from "@/lib/cardBend";
+import { OPEN_MAX } from "@/lib/cardBend";
 import {
   coastOrbit,
   createPointerState,
@@ -19,8 +19,9 @@ import {
   type PointerState,
 } from "@/lib/cardInteract";
 import { createPostfxStack, type PostfxStack } from "@/lib/cardPostfx";
-import { LAYOUT_SPRING, stepHinge, stepSpring, type Spring } from "@/lib/cardMotion";
+import { LAYOUT_SPRING, stepSpring, type Spring } from "@/lib/cardMotion";
 import { createHandRig, type HandRig } from "@/lib/hand/handRig";
+import { createHandBodies } from "@/lib/hand/handBodies";
 import { createGlowSpriteTexture } from "@/lib/cardGlow";
 import { createLampGate } from "@/lib/lampGate";
 import { loadCoverImage, loadLayers } from "@/lib/cardBakes";
@@ -46,13 +47,11 @@ import { buildPaperNormalTile } from "@/lib/cardRelief";
 import {
   addStudioEnvironment,
   addStudioLights,
-  CARD_SHADOW_OFFSET,
-  CARD_SHADOW_PAD_X,
   createCardShadowTexture,
   createStudioRenderer,
   SOFTBOX_POS,
 } from "@/lib/studio";
-import { fitStage, shadowFootprint, studioBackgroundColor, zoomedDistance, type StageFit } from "@/lib/cardStage";
+import { fitStage, studioBackgroundColor, zoomedDistance, type StageFit } from "@/lib/cardStage";
 import { createSnowfallCanvas } from "@/lib/cardTextures";
 import type { CardTemplateId } from "@/lib/types";
 
@@ -175,9 +174,11 @@ function createParticleSprite(): THREE.CanvasTexture {
 }
 
 /** Faces kept on the GPU: the real cards in the hand plus a couple more. */
-const FACE_CACHE_SIZE = 5;
+const FACE_CACHE_SIZE = 6;
 /** Insides kept: the card in front and the one before. */
 const INSIDE_CACHE_SIZE = 2;
+/** Real cards in the hand: the front card and its two neighbours. */
+const HAND_BODIES = 3;
 
 /** 1x1 textures for a template card's inside map slots until its inside arrives. */
 function createPlaceholders() {
@@ -201,8 +202,14 @@ interface SceneHandles {
    */
   upload: (textures: readonly THREE.Texture[], isCancelled: () => boolean) => Promise<void>;
   kitCtx: KitContext;
-  /** The real card (the one in front). */
-  body: CardBody;
+  /** The real card in front now (the hand's focus, or the lone card). */
+  focus: () => CardBody;
+  /** The editor's / letter view's only card (also the hand's first body). */
+  lone: CardBody;
+  /** A card's face, cached or built and uploaded. */
+  ensureFace: (card: CardTemplateId) => Promise<CardFace | null>;
+  /** Resolves once the hand's front card is real and has landed (or on cancel). */
+  untilLanded: (isCancelled: () => boolean) => Promise<void>;
   /** Built faces and insides by card (see lib/card/cardKit). */
   faces: LruCache<string, CardFace>;
   insides: LruCache<string, CardInside>;
@@ -233,16 +240,29 @@ async function cachedBuild<T>(
   return built;
 }
 
-/** Redraw the insert sheet when the message differs from what it shows. */
-function refreshSheet(h: SceneHandles, inside: CardInside, message: string, signature: string): void {
-  const old = redrawSheet(inside, message, signature, h.kitCtx.maxAnisotropy);
+/** Redraw an inside's insert sheet when the message differs from what it shows. */
+function refreshSheetOn(
+  body: CardBody,
+  inside: CardInside,
+  message: string,
+  signature: string,
+  anisotropy: number,
+): void {
+  const old = redrawSheet(inside, message, signature, anisotropy);
   if (!old) return;
-  if (h.body.inside === inside) {
-    h.body.mats.insideRightSheet.map = inside.sheet.map;
-    h.body.mats.insideRightSheet.needsUpdate = true;
+  if (body.inside === inside) {
+    body.mats.insideRightSheet.map = inside.sheet.map;
+    body.mats.insideRightSheet.needsUpdate = true;
   }
   old.dispose();
 }
+
+const nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
+
+/** No pointer sweep (cards away from the front). */
+const STILL = { x: 0, y: 0 } as const;
+/** The hand deals in without its neighbours' real cards after this long. */
+const DEAL_WAIT_MS = 4000;
 
 export function ChristmasCard3D({
   templateId,
@@ -285,14 +305,9 @@ export function ChristmasCard3D({
     // bake ever lands mid-flight (it used to: that was the stutter).
     assetsReady: false,
     burstTimer: 0,
-    snowBounds: { xMin: 0.45, xMax: 2.15, yMin: -0.9, yMax: 1.2 },
-    glowFlicker: true,
     // #7 continuous open progress 0..1 (drag-controllable)
     openProgress: isOpen ? 1 : 0,
     targetOpenProgress: isOpen ? 1 : 0,
-    // Cover hinge angle (rad) and the card's slide to centre (0 shut .. 1 open), as springs.
-    hinge: { x: isOpen ? OPEN_MAX : 0, v: 0 } as Spring,
-    layout: { x: isOpen ? 1 : 0, v: 0 } as Spring,
     // Hand focus (0 browsing .. 1 the rest stepped aside, the card brought closer).
     focus: { x: handFocus || isOpen ? 1 : 0, v: 0 } as Spring,
     releasedImpulse: 0,
@@ -464,47 +479,38 @@ export function ChristmasCard3D({
       : null;
     if (rig) scene.add(rig.group);
     rigRef.current = rig;
-    /** The real card stands in front (vs. its stand-in, while the hand moves). */
-    let realShown = !rig;
 
     const shadowTex = createCardShadowTexture();
     const placeholders = bareRef.current ? null : createPlaceholders();
-    const body = createCardBody({
-      paperNormalTex,
-      snowfallTex,
-      glowTex,
-      shadowTex,
-      lampGate,
-      placeholders,
+    // The hand flies real cards for the front card and its neighbours; a lone card has one.
+    const bodies = Array.from({ length: rig ? HAND_BODIES : 1 }, () => {
+      const b = createCardBody(
+        { paperNormalTex, snowfallTex, glowTex, shadowTex, lampGate, placeholders },
+        !rig && stateRef.current.isOpen,
+      );
+      scene.add(b.outer);
+      return b;
     });
-    scene.add(body.outer);
-    const { outer: outerGroup, center: cardCenterGroup, frontPivot, coverMesh, rightMesh, sheetMesh } = body;
-    const { front: frontGeo, right: rightGeo, sheet: sheetGeo } = body.geos;
-    const { cover: coverBend, right: rightBend, sheet: sheetBend } = body.bends;
-    const {
-      edge: paperEdgeMat,
-      insideLeft: insideLeftMat,
-      insideRightBase: insideRightBaseMat,
-      insideRightSheet: insideRightSheetMat,
-    } = body.mats;
-    const shadowPlane = body.shadowPlane;
-    const shadowMat = shadowPlane.material;
+    /** The card the pointer, the hinge and the camera work on: the one in front. */
+    let fb: CardBody = bodies[0];
 
     // Pointer lamp: the light that follows the pointer across the card,
     // so the impasto relief & paper grain catch a moving sheen (bubbbly uLamp).
     // Physically decayed and held off the face; lights stickers inside too.
+    // It rides the card in front (re-parented, never re-added: the light count stays put).
     const hoverLamp = new THREE.PointLight(0xfffaf4, 0, 4.2, 2);
     hoverLamp.position.set(CARD_W / 2, 0, 1.15);
-    cardCenterGroup.add(hoverLamp);
+    fb.center.add(hoverLamp);
 
     const particleTex = createParticleSprite();
 
-    paperMatsRef.current = [paperEdgeMat, insideLeftMat, insideRightBaseMat, insideRightSheetMat];
-
+    // The editor and the letter view have one card: its paper and its stickers.
+    const lone = bodies[0];
+    paperMatsRef.current = [lone.mats.edge, lone.mats.insideLeft, lone.mats.insideRightBase, lone.mats.insideRightSheet];
     elementLayerRef.current = createElementLayer(
       {
-        "inside-left": { parent: coverMesh, bendWidth: CARD_W },
-        "inside-right": { parent: sheetMesh, bendWidth: CARD_W },
+        "inside-left": { parent: lone.coverMesh, bendWidth: CARD_W },
+        "inside-right": { parent: lone.sheetMesh, bendWidth: CARD_W },
       },
       maxAnisotropy,
     );
@@ -513,24 +519,68 @@ export function ChristmasCard3D({
     const kitCtx: KitContext = { maxAnisotropy, lampGate, paperNormalTex, liftedMatPool };
     const unwarmPieces = warmPieceMaterials(scene, lampGate, paperNormalTex);
     const uploaded = new WeakSet<THREE.Texture>();
+    const faces = createLruCache<string, CardFace>(FACE_CACHE_SIZE, (_key, face) => disposeFace(face, liftedMatPool));
+    const insides = createLruCache<string, CardInside>(INSIDE_CACHE_SIZE, (_key, inside) => disposeInside(inside));
+    /** One texture per frame: each costs a few ms (storage, copy, mipmaps). */
+    const upload = async (textures: readonly THREE.Texture[], isCancelled: () => boolean) => {
+      for (const tex of new Set(textures)) {
+        if (uploaded.has(tex)) continue;
+        await new Promise((r) => requestAnimationFrame(r));
+        // The rest upload when this card is next built or shown.
+        if (isCancelled()) return;
+        renderer.initTexture(tex);
+        uploaded.add(tex);
+      }
+    };
+    let unmounted = false;
+    const faceBuilds = new Map<CardTemplateId, Promise<CardFace | null>>();
+    /** A card's face: cached, or built, decoded and uploaded (one build per card at a time). */
+    const ensureFace = (card: CardTemplateId): Promise<CardFace | null> => {
+      const running = faceBuilds.get(card);
+      if (running) return running;
+      const isGone = () => unmounted;
+      const p = (async () => {
+        const spec = CARD_ASSETS[card];
+        const [coverImg, layered] = await Promise.all([loadCoverImage(spec.coverSrc), loadLayers(card), ensureSurfaces(card)]);
+        if (unmounted) return null;
+        const face = await cachedBuild(faces, card, () => buildFace(kitCtx, { templateId: card, coverImg, layered }, isGone), (f) =>
+          disposeFace(f, liftedMatPool),
+        );
+        if (face) await upload(faceUploads(face), isGone);
+        return face;
+      })()
+        .catch(() => null)
+        .finally(() => faceBuilds.delete(card));
+      faceBuilds.set(card, p);
+      return p;
+    };
+    const hand = rig
+      ? createHandBodies({
+          rig,
+          bodies,
+          faceFor: (card) => {
+            // Only a face that is fully uploaded goes on: no upload on the frame it shows.
+            const face = faces.get(card);
+            return face && !faceBuilds.has(card) ? face : null;
+          },
+          requestFace: (card) => {
+            if (!faces.get(card)) void ensureFace(card);
+          },
+        })
+      : null;
+
     sceneHandlesRef.current = {
       prewarm,
-      // One texture per frame: each costs a few ms (storage, copy, mipmaps),
-      // so spread over the deal they never add up to a dropped frame.
-      upload: async (textures, isCancelled) => {
-        for (const tex of new Set(textures)) {
-          if (uploaded.has(tex)) continue;
-          await new Promise((r) => requestAnimationFrame(r));
-          // The rest upload when this card is next built or shown.
-          if (isCancelled()) return;
-          renderer.initTexture(tex);
-          uploaded.add(tex);
-        }
-      },
+      upload,
       kitCtx,
-      body,
-      faces: createLruCache<string, CardFace>(FACE_CACHE_SIZE, (_key, face) => disposeFace(face, liftedMatPool)),
-      insides: createLruCache<string, CardInside>(INSIDE_CACHE_SIZE, (_key, inside) => disposeInside(inside)),
+      focus: () => fb,
+      lone,
+      untilLanded: async (isCancelled) => {
+        while (!frontLanded && !isCancelled() && !unmounted) await nextFrame();
+      },
+      ensureFace,
+      faces,
+      insides,
     };
 
     // Card-open golden sparkle burst
@@ -587,14 +637,14 @@ export function ChristmasCard3D({
 
     /** A tap on the closed cover: a light flares, a part reacts, or the card opens. */
     const handleCoverTap = (local: { x: number; y: number } | null): boolean => {
-      const live = body.live;
+      const live = fb.live;
       if (!local || !live || stateRef.current.openProgress > 0.1) return false;
       const px = coverLocalToPx(local, COVER_PX_W, COVER_PX_H);
       const hit = resolveLiveTap(live.spec, px.x, px.y);
       if (hit.kind === "open") return false;
       const burstAt = (at: readonly [number, number]) => {
         const l = coverPxToLocal(at, COVER_PX_W, COVER_PX_H);
-        triggerBurst(coverMesh.localToWorld(new THREE.Vector3(l.x, l.y, CARD_THICKNESS + 0.05)));
+        triggerBurst(fb.coverMesh.localToWorld(new THREE.Vector3(l.x, l.y, CARD_THICKNESS + 0.05)));
       };
       if (hit.kind === "glow" && live.spec.glowTap) {
         stateRef.current.glowFlare = 1;
@@ -606,17 +656,17 @@ export function ChristmasCard3D({
         kickMovers(live.rt, hit.tap.kick ?? []);
         if (hit.tap.sparkle) burstAt(hit.tap.sparkle);
         if (hit.tap.lift) {
-          for (const lm of body.liftedMeshes) lm.impulse = 1;
+          for (const lm of fb.liftedMeshes) lm.impulse = 1;
         }
       }
       return true;
     };
-    // Where the pointer touches the card, in cardCenterGroup space; the
+    // Where the pointer touches the card, in fb.center space; the
     // pointer lamp hovers right above it (bubbbly uLamp).
     const lampRay = new THREE.Raycaster();
     const lampNdc = new THREE.Vector2();
     const lampTarget = new THREE.Vector3(CARD_W / 2, 0, 0);
-    const lampSurfaces: THREE.Object3D[] = [coverMesh, sheetMesh, rightMesh];
+    const lampSurfaces = (): THREE.Object3D[] => [fb.coverMesh, fb.sheetMesh, fb.rightMesh];
 
     const pickRay = new THREE.Raycaster();
     const pickNdc = new THREE.Vector2();
@@ -626,20 +676,20 @@ export function ChristmasCard3D({
       return pickNdc;
     };
     const faceOf = (panel: THREE.Object3D, normalZ: number): Face | null => {
-      if (panel === sheetMesh && normalZ > 0) return "inside-right";
-      if (panel === coverMesh && normalZ < 0) return "inside-left";
+      if (panel === fb.sheetMesh && normalZ > 0) return "inside-right";
+      if (panel === fb.coverMesh && normalZ < 0) return "inside-left";
       return null;
     };
     pickApiRef.current = {
       pick(cx, cy) {
         pickRay.setFromCamera(toNdc(cx, cy), camera);
         const layer = elementLayerRef.current?.meshes() ?? [];
-        const hits = pickRay.intersectObjects([...layer, coverMesh, sheetMesh], false);
+        const hits = pickRay.intersectObjects([...layer, fb.coverMesh, fb.sheetMesh], false);
         for (const hit of hits) {
           const isElement = typeof hit.object.userData.uid === "string";
           const panel = isElement ? hit.object.parent : hit.object;
           if (!panel) continue;
-          const normalZ = isElement ? (panel === coverMesh ? -1 : 1) : (hit.face?.normal.z ?? 0);
+          const normalZ = isElement ? (panel === fb.coverMesh ? -1 : 1) : (hit.face?.normal.z ?? 0);
           const face = faceOf(panel, normalZ);
           if (!face) continue;
           const local = panel.worldToLocal(hit.point.clone());
@@ -649,7 +699,7 @@ export function ChristmasCard3D({
         return null;
       },
       projectFace(face) {
-        const panel = face === "inside-left" ? coverMesh : sheetMesh;
+        const panel = face === "inside-left" ? fb.coverMesh : fb.sheetMesh;
         const rect = container.getBoundingClientRect();
         return [
           [0, 0],
@@ -733,9 +783,9 @@ export function ChristmasCard3D({
         );
         lampRay.setFromCamera(lampNdc, camera);
         // Cover (front or inside-left face), insert sheet, right panel.
-        const hit = lampRay.intersectObjects(lampSurfaces, false)[0];
+        const hit = lampRay.intersectObjects(lampSurfaces(), false)[0];
         ptr.over = Boolean(hit);
-        if (hit) lampTarget.copy(cardCenterGroup.worldToLocal(hit.point.clone()));
+        if (hit) lampTarget.copy(fb.center.worldToLocal(hit.point.clone()));
         // The pointer blows a breeze through the card as it sweeps across it.
         const now = performance.now();
         if (hit && interactiveRef.current && windLastT > 0) {
@@ -805,14 +855,14 @@ export function ChristmasCard3D({
           rig.goBy(side);
           return;
         }
-        if (!realShown) {
+        if (!frontLanded) {
           // The front card is still landing (its stand-in is in front): a tap
           // focuses it all the same; the real card takes over as it lands.
           if (side === 0 && !focused) onFocus?.(true);
           return;
         }
         pickRay.setFromCamera(toNdc(e.clientX, e.clientY), camera);
-        const onCard = pickRay.intersectObjects(lampSurfaces, false).length > 0;
+        const onCard = pickRay.intersectObjects(lampSurfaces(), false).length > 0;
         if (!focused) {
           // Browsing: a tap on the front card focuses it (the cover, not yet the inside).
           if (onCard) onFocus?.(true);
@@ -830,11 +880,11 @@ export function ChristmasCard3D({
         // A click undoes the few pixels of turn it may have made, then acts.
         stateRef.current.targetDragRotX = orbitBase.x;
         stateRef.current.targetDragRotY = orbitBase.y;
-        const local = pointerToCardLocal(e, container, camera, coverMesh);
+        const local = pointerToCardLocal(e, container, camera, fb.coverMesh);
         if (stateRef.current.targetOpenProgress > 0.5) {
           // Open card: a click anywhere on it (either page) closes it.
           pickRay.setFromCamera(toNdc(e.clientX, e.clientY), camera);
-          if (pickRay.intersectObjects(lampSurfaces, false).length > 0) {
+          if (pickRay.intersectObjects(lampSurfaces(), false).length > 0) {
             callbacksRef.current.onToggleOpen?.();
           }
         } else if (handleCoverTap(local)) {
@@ -908,6 +958,21 @@ export function ChristmasCard3D({
 
     let animId = 0;
     let elapsed = 0;
+    const mountedAt = performance.now();
+    /** The hand's front card is a real body (not its stand-in). */
+    let focusLive = !rig;
+    /** ...and has landed: taps go to it. */
+    let frontLanded = !rig;
+    /** The card in front wears its inside; the others give theirs back (placeholders). */
+    const syncInsides = (focus: CardBody | null) => {
+      for (const b of bodies) {
+        const card = b.templateId;
+        const wanted = b === focus && card ? (insides.get(insideKey(card, bareRef.current)) ?? null) : null;
+        if (b.inside === wanted) continue;
+        b.applyInside(wanted);
+        if (wanted && !bareRef.current) refreshSheetOn(b, wanted, textRef.current.message, textRef.current.signature, maxAnisotropy);
+      }
+    };
     /** The pointer's sweep in card units/s: it blows the flakes and the far snow. */
     let sweepWind = { x: 0, y: 0 };
     let lastTime = performance.now();
@@ -937,7 +1002,19 @@ export function ChristmasCard3D({
       // Living card: the breeze dies away; parts sway, react and settle.
       s.wind *= Math.exp(-dt * 2.4);
       s.glowFlare = Math.max(0, s.glowFlare - dt * 1.4);
-      const live = body.live;
+
+      // The hand: which real cards stand in for which slots, and which one is in front.
+      if (hand) {
+        hand.assign();
+        const focus = hand.focusBody();
+        if (focus && focus !== fb) {
+          fb = focus;
+          fb.center.add(hoverLamp);
+        }
+        focusLive = focus !== null;
+        syncInsides(focus);
+      }
+      const live = fb.live;
       if (live && !s.isPaused && s.openProgress < 0.95 && s.greetIn > 0) {
         s.greetIn -= dt;
         if (s.greetIn <= 0) kickMovers(live.rt, live.spec.greet, 0.8);
@@ -966,32 +1043,16 @@ export function ChristmasCard3D({
         snowfallTex.offset.x -= ((wind.x * 0.12) / CARD_W) * dt;
       }
 
-      // #1 Hinge + slide springs (see lib/cardMotion) -> angle + bow bend.
-      s.hinge = stepHinge(s.hinge, s.targetOpenProgress * OPEN_MAX, dt);
-      s.layout = stepSpring(s.layout, s.targetOpenProgress > 0.5 ? 1 : 0, LAYOUT_SPRING, dt);
-      s.openProgress = THREE.MathUtils.clamp(s.hinge.x / OPEN_MAX, 0, 1);
+      // Hinge + slide springs (see lib/cardMotion): the card in front opens
+      // (once its inside is on); every other real card closes.
+      const insideOn = !hand || (focusLive && fb.inside !== null && fb.inside.templateId === fb.templateId);
+      const fo = fb.stepOpen(dt, insideOn ? s.targetOpenProgress : 0, motion);
+      for (const b of bodies) if (b !== fb) b.stepOpen(dt, 0, motion);
+      s.openProgress = fo.open;
       callbacksRef.current.onOpenProgress?.(s.openProgress);
-
-      const openAngle = s.hinge.x;
-      frontPivot.rotation.y = -openAngle;
-
-      // Bow the cover: peak curvature near mid-turn, straight when shut/open.
-      const bowMix = Math.sin(Math.min(Math.PI, openAngle / OPEN_MAX) * Math.PI);
-      const bend = BOW_AMP * bowMix * motion;
-      applyBow(frontGeo, CARD_W, bend, coverBend);
-      for (const lm of body.liftedMeshes) applyBow(lm.geometry, CARD_W, bend, lm.bend);
-      applyBow(rightGeo, CARD_W, bend * 0.35, rightBend);
-      applyBow(sheetGeo, CARD_W, bend * 0.35, sheetBend);
-      elementLayerRef.current?.applyBend({ "inside-left": bend, "inside-right": bend * 0.35 });
+      elementLayerRef.current?.applyBend({ "inside-left": fo.bend, "inside-right": fo.bend * 0.35 });
 
       {
-        // #3 Inside shade: cover shades the inside as it swings.
-        const shade = 1 - 0.45 * Math.sin(Math.min(Math.PI, openAngle / OPEN_MAX) * Math.PI);
-        insideLeftMat.color.copy(paperTintOf(insideLeftMat)).multiplyScalar(shade);
-        insideRightBaseMat.color
-          .copy(paperTintOf(insideRightBaseMat))
-          .multiplyScalar(1 - 0.28 * (1 - shade));
-
         // #2 Key light follows pointer a little (studio softbox nudge).
         keyTarget.position.x = THREE.MathUtils.lerp(
           keyTarget.position.x,
@@ -1040,17 +1101,21 @@ export function ChristmasCard3D({
         // Lifted relief meshes bob & twinkle, with the release impulse (#8).
         const impulse = s.releasedImpulse;
         s.releasedImpulse = Math.max(0, s.releasedImpulse - dt * 1.8);
-        body.ambient({
-          dt,
-          elapsed,
-          motion,
-          paused: s.isPaused,
-          openProgress: s.openProgress,
-          glowFlare: s.glowFlare,
-          wind: s.wind,
-          sweep: sweepWind,
-          impulse,
-        });
+        for (const b of hand ? hand.shown() : bodies) {
+          // Only the card in front feels the pointer.
+          const front = b === fb && (focusLive || !hand);
+          b.ambient({
+            dt,
+            elapsed,
+            motion,
+            paused: s.isPaused,
+            openProgress: front ? s.openProgress : THREE.MathUtils.clamp(b.hinge.x / OPEN_MAX, 0, 1),
+            glowFlare: front ? s.glowFlare : 0,
+            wind: front ? s.wind : 0,
+            sweep: front ? sweepWind : STILL,
+            impulse: front ? impulse : 0,
+          });
+        }
       }
 
       if (s.burstTimer > 0) {
@@ -1069,8 +1134,6 @@ export function ChristmasCard3D({
         burstMat.opacity = 0;
       }
 
-      // The card glides to centre while the cover swings, both ways.
-      cardCenterGroup.position.x = (-CARD_W / 2) * (1 - s.layout.x);
 
       // Resting pose: almost square to the lens, like a card on a copy stand.
       const floatY = Math.sin(elapsed * 1.1 * motion) * 0.018 * motion;
@@ -1113,43 +1176,32 @@ export function ChristmasCard3D({
       if (rig) {
         // The rest of the hand steps aside as the card slides open.
         s.focus = stepSpring(s.focus, focusRef.current || s.targetOpenProgress > 0.5 ? 1 : 0, LAYOUT_SPRING, dt);
-        const room = Math.max(s.focus.x, s.layout.x);
+        const room = Math.max(s.focus.x, fb.layout.x);
         rig.update(dt, room);
-        if (s.assetsReady) rig.dealIn();
-        const ids = handRef.current?.templateIds ?? [];
-        const front = rig.settled() && s.assetsReady && ids[rig.targetIndex()] === templateIdRef.current;
-        if (front && !realShown) s.greetIn = 0.15; // the card comes alive as it lands
-        realShown = front;
-        rig.showFront(!realShown);
-        // The hand shares the card's pointer tilt, so the stand-in lines up with it.
+        // Deal in once the front card and its neighbours are real (or after a wait).
+        if (s.assetsReady && (hand?.settledIn() || now - mountedAt > DEAL_WAIT_MS)) rig.dealIn();
+        // The hand shares the card's pointer tilt, so the slots line up with it.
         rig.group.rotation.set(s.dragRotX * (1 - room), s.dragRotY * (1 - room), 0);
       }
 
-      outerGroup.position.z = THREE.MathUtils.lerp(-14, 0, ease);
-      outerGroup.position.y = THREE.MathUtils.lerp(2.2, floatY, ease);
-      const scaleVal = THREE.MathUtils.lerp(0.24, 1.0, ease);
-      outerGroup.scale.setScalar(scaleVal);
-
-      outerGroup.rotation.x =
-        THREE.MathUtils.lerp(-0.32, baseRotX, ease) + s.dragRotX;
-      outerGroup.rotation.y =
-        THREE.MathUtils.lerp(0.75, baseRotY, ease) + s.dragRotY;
-      outerGroup.rotation.z =
-        THREE.MathUtils.lerp(0.24, baseRotZ + floatRotZ, ease);
-      if (!realShown) {
-        // Stand aside beyond the far plane rather than hide: hiding would drop
-        // the card's point lights from the scene, and a changed light count
-        // recompiles every lit shader mid-deal.
-        outerGroup.position.z = -1000;
+      // The card in front: its own pose (fly-in, float, drag).
+      const outer = fb.outer;
+      outer.position.set(0, THREE.MathUtils.lerp(2.2, floatY, ease), THREE.MathUtils.lerp(-14, 0, ease));
+      outer.scale.setScalar(THREE.MathUtils.lerp(0.24, 1.0, ease));
+      outer.rotation.set(
+        THREE.MathUtils.lerp(-0.32, baseRotX, ease) + s.dragRotX,
+        THREE.MathUtils.lerp(0.75, baseRotY, ease) + s.dragRotY,
+        THREE.MathUtils.lerp(0.24, baseRotZ + floatRotZ, ease),
+      );
+      fb.shadowPlane.material.opacity = ease;
+      if (hand && rig) {
+        // Every real card rides its slot; the one in front blends into its own pose.
+        const frame = hand.pose(focusLive ? fb : null);
+        const landed = focusLive && frame.weight > 0.999 && rig.settled();
+        if (landed && !frontLanded) s.greetIn = 0.15; // the card comes alive as it lands
+        frontLanded = landed;
+        rig.showFront(!focusLive);
       }
-
-      shadowMat.opacity = ease;
-      // Follow what actually casts the shadow: a cover mid-swing throws none
-      // to the left of the spine. The soft padding keeps its width.
-      const foot = shadowFootprint(openAngle, CARD_W);
-      const footW = foot.right - foot.left;
-      shadowPlane.position.x = cardCenterGroup.position.x + (foot.left + foot.right) / 2 + CARD_SHADOW_OFFSET.x;
-      shadowPlane.scale.set((footW + CARD_W * (CARD_SHADOW_PAD_X - 1)) / (CARD_W * CARD_SHADOW_PAD_X), 1.0, 1.0);
 
       lampGate.update(hoverLamp, camera);
       postfx.render(dt);
@@ -1164,6 +1216,7 @@ export function ChristmasCard3D({
     callbacksRef.current.onReady?.();
 
     return () => {
+      unmounted = true;
       cancelAnimationFrame(animId);
       window.removeEventListener("keydown", onKey);
       domEl.removeEventListener("pointerdown", onPointerDown);
@@ -1182,7 +1235,7 @@ export function ChristmasCard3D({
       }
       unwarmPieces();
       for (const mat of liftedMatPool) mat.dispose();
-      body.dispose();
+      for (const b of bodies) b.dispose();
       if (placeholders) for (const t of Object.values(placeholders)) t.dispose();
       burstGeo.dispose();
       shadowTex.dispose();
@@ -1211,55 +1264,65 @@ export function ChristmasCard3D({
 
     let cancelled = false;
     const isCancelled = () => cancelled;
-    const spec = CARD_ASSETS[templateId];
     const bare = bareRef.current;
     stateRef.current.assetsReady = false;
 
-    const kitReady = async () => {
-      const [coverImg, layered] = await Promise.all([
-        loadCoverImage(spec.coverSrc),
-        loadLayers(templateId),
-        ensureSurfaces(templateId),
-      ]);
-      if (cancelled) return null;
-      const face = await cachedBuild(
-        h.faces,
-        templateId,
-        () => buildFace(h.kitCtx, { templateId, coverImg, layered }, isCancelled),
-        (f) => disposeFace(f, h.kitCtx.liftedMatPool),
-      );
-      if (!face) return null;
-      const inside = await cachedBuild(
+    const inHand = Boolean(rigRef.current);
+    const insideFor = (face: CardFace) =>
+      cachedBuild(
         h.insides,
         insideKey(templateId, bare),
-        () => buildInside(h.kitCtx, { templateId, coverImg, bare, ...textRef.current }, isCancelled),
+        () =>
+          buildInside(
+            h.kitCtx,
+            { templateId, coverImg: face.coverImg, bare, ...textRef.current },
+            isCancelled,
+            // In the hand, one page per frame (the card is already on show).
+            inHand ? nextFrame : undefined,
+          ),
         disposeInside,
       );
-      if (!inside) return null;
-      // Upload while the card is still hidden, not on the frame it shows.
-      await h.upload([...faceUploads(face), ...insideUploads(inside)], isCancelled);
-      return cancelled ? null : { face, inside };
-    };
 
-    kitReady()
-      .then(async (kit) => {
-        if (cancelled || !kit) return;
-        h.body.setCard(templateId);
-        h.body.applyFace(kit.face);
-        h.body.applyInside(kit.inside);
-        if (!bare) refreshSheet(h, kit.inside, textRef.current.message, textRef.current.signature);
-        coverImageRef.current = kit.face.coverImg;
-        coverOnRef.current = true;
-        // Compile the new material setup before the card flies, not on its first frame.
-        await h.prewarm().catch(() => undefined);
-        if (cancelled) return;
+    const prepare = async () => {
+      const face = await h.ensureFace(templateId);
+      if (cancelled || !face) return;
+      coverImageRef.current = face.coverImg;
+      coverOnRef.current = true;
+      if (inHand) {
+        // The hand deals in on the face alone; the frame loop puts it on a real
+        // card. No prewarm per switch: the real cards' programs are compiled once
+        // they first show, and walking every material in the hand costs a frame.
         stateRef.current.assetsReady = true;
         prebakeAllCards(templateId);
-      })
-      .catch(() => {
-        // The cover failed to load: let the card in with what it has rather than hang.
-        stateRef.current.assetsReady = true;
-      });
+        // The pages are only needed to open the card: draw them once it has
+        // landed, never during the deal.
+        await h.untilLanded(isCancelled);
+        if (cancelled) return;
+        const inside = await insideFor(face);
+        if (inside) await h.upload(insideUploads(inside), isCancelled);
+        return;
+      }
+      // A lone card flies in with everything on.
+      const inside = await insideFor(face);
+      if (!inside || cancelled) return;
+      await h.upload(insideUploads(inside), isCancelled);
+      if (cancelled) return;
+      const lone = h.lone;
+      lone.setCard(templateId);
+      lone.applyFace(face);
+      lone.applyInside(inside);
+      if (!bare) refreshSheetOn(lone, inside, textRef.current.message, textRef.current.signature, h.kitCtx.maxAnisotropy);
+      // Compile the new material setup before the card flies, not on its first frame.
+      await h.prewarm().catch(() => undefined);
+      if (cancelled) return;
+      stateRef.current.assetsReady = true;
+      prebakeAllCards(templateId);
+    };
+
+    prepare().catch(() => {
+      // The cover failed to load: let the card in with what it has rather than hang.
+      stateRef.current.assetsReady = true;
+    });
 
     return () => {
       cancelled = true;
@@ -1271,9 +1334,10 @@ export function ChristmasCard3D({
   // switch the switch itself does this, once the new card's inside is on.
   useEffect(() => {
     const h = sceneHandlesRef.current;
-    const inside = h?.body.inside;
-    if (!h || !inside || bareRef.current || inside.templateId !== templateId) return;
-    refreshSheet(h, inside, message, signature);
+    const body = h?.focus();
+    const inside = body?.inside;
+    if (!h || !body || !inside || bareRef.current || inside.templateId !== templateId) return;
+    refreshSheetOn(body, inside, message, signature, h.kitCtx.maxAnisotropy);
   }, [templateId, message, signature]);
 
   useEffect(() => {
