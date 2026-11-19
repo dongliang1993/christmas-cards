@@ -20,6 +20,8 @@ import {
 } from "@/lib/cardInteract";
 import { createPostfxStack, type PostfxStack } from "@/lib/cardPostfx";
 import { LAYOUT_SPRING, stepSpring, type Spring } from "@/lib/cardMotion";
+import { hingeCue } from "@/lib/hingeCue";
+import { playSfx, preloadSfx } from "@/lib/sfx";
 import { createHandRig, type HandRig } from "@/lib/hand/handRig";
 import { createHandBodies } from "@/lib/hand/handBodies";
 import { createGlowSpriteTexture } from "@/lib/cardGlow";
@@ -1051,7 +1053,15 @@ export function ChristmasCard3D({
       // Hinge + slide springs (see lib/cardMotion): the card in front opens
       // (once its inside is on); every other real card closes.
       const insideOn = !hand || (focusLive && fb.inside !== null && fb.inside.templateId === fb.templateId);
-      const fo = fb.stepOpen(dt, insideOn ? s.targetOpenProgress : 0, motion);
+      const hingeTarget = insideOn ? s.targetOpenProgress : 0;
+      // The open/close sound starts on the frame the hinge does (lib/hingeCue).
+      if (fb === hingeBody) {
+        const cue = hingeCue({ prevTarget: hingeTargetWas, target: hingeTarget, progress: s.openProgress });
+        if (cue) playSfx(cue);
+      }
+      hingeBody = fb;
+      hingeTargetWas = hingeTarget;
+      const fo = fb.stepOpen(dt, hingeTarget, motion);
       for (const b of bodies) if (b !== fb) b.stepOpen(dt, 0, motion);
       s.openProgress = fo.open;
       callbacksRef.current.onOpenProgress?.(s.openProgress);
@@ -1217,6 +1227,9 @@ export function ChristmasCard3D({
     };
 
     let firstFrameFired = false;
+    let hingeBody: CardBody | null = null;
+    let hingeTargetWas = stateRef.current.targetOpenProgress;
+    preloadSfx();
     animId = requestAnimationFrame(animate);
     callbacksRef.current.onReady?.();
 

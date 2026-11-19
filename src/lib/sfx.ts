@@ -1,48 +1,114 @@
 /**
- * Card sound effects: slices of a paper-friction recording
- * (public/uploads/纸张摩擦.mp3), cut where its silences fall.
+ * Card sound effects.
  *
- * Playback is fire-and-forget: browsers only allow audio after a user
- * gesture, and both triggers (tap-to-open, gallery switch) are gestures.
+ *   open / close - the cover's hinge, rendered by scripts/sfx/paper_card.py
+ *                  from the same spring as the 3D cover (variant "b-textured").
+ *                  Cued by the render loop on the frame the hinge starts
+ *                  moving (lib/hingeCue), so sound and swing start together.
+ *   switch       - a short paper rub when another card comes to the front.
+ *
+ * Played through Web Audio from buffers decoded up front: an <audio>
+ * element starts 50-200 ms late on phones, which is the whole swing's
+ * first half. Browsers keep the context suspended until a user gesture,
+ * so the first pointer/key press resumes it; every cue follows a gesture.
  */
 
 const SFX_DIR = "/assets/sfx";
 
-/** [start, seconds] of each cut in the source recording. */
-export const SWIPE_FILES = {
-  /** A short paper rub: brisk, boosted, no dragging tail. */
-  open: `${SFX_DIR}/rub-a.m4a`,
-  /** Slightly shorter rub for switching cards. */
+export const SFX_FILES = {
+  open: `${SFX_DIR}/card-open.m4a`,
+  close: `${SFX_DIR}/card-close.m4a`,
   switch: `${SFX_DIR}/rub-b.m4a`,
 } as const;
 
-export type SwipeName = keyof typeof SWIPE_FILES;
+export type SfxName = keyof typeof SFX_FILES;
 
-const VOLUMES: Record<SwipeName, number> = {
+const VOLUMES: Record<SfxName, number> = {
   open: 0.9,
+  close: 0.9,
   switch: 0.85,
 };
 
-const audioCache = new Map<string, HTMLAudioElement>();
+let ctx: AudioContext | null = null;
+const buffers = new Map<SfxName, Promise<AudioBuffer | null>>();
+/** Decoded and ready to start this instant. */
+const ready = new Map<SfxName, AudioBuffer>();
 
-function elementFor(src: string): HTMLAudioElement {
-  let el = audioCache.get(src);
-  if (!el) {
-    el = new Audio(src);
-    el.preload = "auto";
-    audioCache.set(src, el);
+function context(): AudioContext | null {
+  if (ctx) return ctx;
+  const Ctor = typeof window === "undefined" ? undefined : window.AudioContext;
+  if (!Ctor) return null;
+  try {
+    ctx = new Ctor();
+  } catch {
+    return null; // No audio hardware: the card works fine silent.
   }
-  return el;
+  return ctx;
 }
 
-/** Play a paper swipe. Never throws: no audio hardware, just skip it. */
-export function playSwipe(name: SwipeName): void {
+function bufferFor(name: SfxName): Promise<AudioBuffer | null> {
+  const hit = buffers.get(name);
+  if (hit) return hit;
+  const ac = context();
+  const p: Promise<AudioBuffer | null> = !ac
+    ? Promise.resolve(null)
+    : fetch(SFX_FILES[name])
+        .then((res) => {
+          if (!res.ok) throw new Error(`音效加载失败 ${name} (${res.status})`);
+          return res.arrayBuffer();
+        })
+        .then((data) => ac.decodeAudioData(data))
+        .then((buffer) => {
+          ready.set(name, buffer);
+          return buffer;
+        })
+        .catch(() => {
+          buffers.delete(name); // let a later cue retry
+          return null;
+        });
+  buffers.set(name, p);
+  return p;
+}
+
+/** Decode every sound now, so a cue never waits on the network. */
+export function preloadSfx(): void {
+  for (const name of Object.keys(SFX_FILES) as SfxName[]) void bufferFor(name);
+}
+
+/** Play a sound. Never throws; a sound that isn't decoded yet is skipped, not played late. */
+export function playSfx(name: SfxName): void {
+  const ac = context();
+  const buffer = ready.get(name);
+  if (!ac || ac.state === "closed") return;
+  if (!buffer) {
+    void bufferFor(name);
+    return;
+  }
   try {
-    const el = elementFor(SWIPE_FILES[name]);
-    el.volume = VOLUMES[name];
-    el.currentTime = 0;
-    el.play().catch(() => undefined);
+    const source = ac.createBufferSource();
+    const gain = ac.createGain();
+    gain.gain.value = VOLUMES[name];
+    source.buffer = buffer;
+    source.connect(gain).connect(ac.destination);
+    source.start();
   } catch {
-    // No audio support: the card works fine silent.
+    // Audio graph refused (rare, e.g. a torn-down context): stay silent.
+  }
+}
+
+/** Kept for the card-switch call sites. */
+export function playSwipe(name: "switch"): void {
+  playSfx(name);
+}
+
+function unlock(): void {
+  const ac = context();
+  if (ac && ac.state === "suspended") void ac.resume().catch(() => undefined);
+}
+
+if (typeof window !== "undefined") {
+  // Capture phase: resume before the click handler that cues the sound runs.
+  for (const type of ["pointerdown", "keydown", "touchend"] as const) {
+    window.addEventListener(type, unlock, { capture: true, passive: true });
   }
 }

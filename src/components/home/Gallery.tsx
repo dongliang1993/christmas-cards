@@ -34,10 +34,8 @@ export function Gallery() {
   // Opening always happens on a focused card (the rest of the hand steps aside).
   const toggleOpen = () => {
     setFocus(true);
-    setOpen((v) => {
-      if (!v) playSwipe("open");
-      return !v;
-    });
+    // The hinge sounds are cued by the 3D card itself, on the frame it moves.
+    setOpen((v) => !v);
   };
   // Stable for the card's lifetime (it reads the hand once at mount), so it
   // must not close over `templateId`: set state directly.

@@ -8,7 +8,6 @@ import { EnvelopeScene } from "@/components/envelope/EnvelopeScene";
 import { CARD_ASSETS } from "@/lib/cardAssets";
 import { lettersApi } from "@/lib/client/lettersApi";
 import { hideChristmasLoading } from "@/lib/loadingVeil";
-import { playSwipe } from "@/lib/sfx";
 import type { PublicLetter } from "@/lib/letter/model";
 import { shouldRecordOpening, viewerStage } from "@/lib/letter/viewer";
 
@@ -99,10 +98,7 @@ export function LetterViewer({ id }: { id: string }) {
             flyIn={false}
             elements={content.elements}
             paper={content.paper}
-            onToggleOpen={() => {
-              if (!open) playSwipe("open");
-              setOpen((v) => !v);
-            }}
+            onToggleOpen={() => setOpen((v) => !v)}
             onFirstFrame={() => {
               setCardReady(true);
               hideChristmasLoading();
