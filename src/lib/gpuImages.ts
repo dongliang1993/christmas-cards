@@ -20,12 +20,39 @@ interface DecodeDeps<I> {
   decode: (img: I, opts?: ImageBitmapOptions) => Promise<ImageBitmap>;
 }
 
+/** The bytes each <img> was made from (see loadImageOnce), so decoding never re-downloads. */
+const sourceBlobs = new WeakMap<HTMLImageElement, Blob>();
+
+/**
+ * Download an image once and keep its bytes: the <img> is built from the
+ * same Blob that decodeOffThread later turns into a bitmap. Re-fetching
+ * img.src for the bitmap doubled every texture's download whenever the HTTP
+ * cache missed (cache disabled, evicted, or a cold edge).
+ */
+export async function loadImageOnce(src: string): Promise<HTMLImageElement> {
+  const res = await fetch(src);
+  if (!res.ok) throw new Error(`图片加载失败 ${src} (${res.status})`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const img = new Image();
+  try {
+    img.src = url;
+    await img.decode();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+  sourceBlobs.set(img, blob);
+  return img;
+}
+
 /**
  * Chrome decodes `createImageBitmap(<img>)` on the main thread; only a Blob
- * source decodes off it. The <img> already loaded, so the fetch is an HTTP
- * cache hit.
+ * source decodes off it. Images from loadImageOnce reuse their bytes; any
+ * other <img> falls back to a fetch (normally an HTTP cache hit).
  */
 async function decodeOffThread(img: HTMLImageElement, opts?: ImageBitmapOptions): Promise<ImageBitmap> {
+  const kept = sourceBlobs.get(img);
+  if (kept) return createImageBitmap(kept, opts);
   const res = await fetch(img.currentSrc || img.src);
   if (!res.ok) throw new Error(`fetch ${res.status}`);
   return createImageBitmap(await res.blob(), opts);

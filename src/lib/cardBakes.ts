@@ -9,6 +9,7 @@ import {
   snowMaskKey,
 } from "./bakeKeys";
 import { rememberImage } from "./imageRegistry";
+import { loadImageOnce } from "./gpuImages";
 import { buildSurface, readPixels, toCanvas, type CoverSurface, type SurfaceImage } from "./cardRelief";
 import { alphaMask, bakeSurfacePixels } from "./reliefCore";
 import { createInsideLeftCanvas, createInsideRightSheetCanvas, createSnowMaskCanvas } from "./cardTextures";
@@ -35,15 +36,9 @@ const images = new Map<string, Promise<HTMLImageElement>>();
 export function loadCoverImage(src: string): Promise<HTMLImageElement> {
   const hit = images.get(src);
   if (hit) return hit;
-  const p = new Promise<HTMLImageElement>((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      rememberImage(src, img);
-      resolve(img);
-    };
-    img.onerror = reject;
-    img.src = src;
+  const p = loadImageOnce(src).then((img) => {
+    rememberImage(src, img);
+    return img;
   });
   images.set(src, p);
   // A failed load may be retried later.
