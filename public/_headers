@@ -1,0 +1,10 @@
+# Workers Static Assets headers (copied into .open-next/assets at build).
+
+# Content-hashed build output: a new deploy gets new file names.
+/_next/static/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Art, stickers, fonts, audio: names are stable, so cache for a day and
+# keep serving a stale copy for a week while the browser revalidates.
+/assets/*
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800

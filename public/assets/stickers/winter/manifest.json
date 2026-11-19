@@ -5,73 +5,73 @@
       "id": "star-gold",
       "label": "金色星星",
       "material": "foil",
-      "src": "/assets/stickers/winter/star-gold.png"
+      "src": "/assets/stickers/winter/star-gold.webp"
     },
     {
       "id": "sparkles",
       "label": "闪光",
       "material": "foil",
-      "src": "/assets/stickers/winter/sparkles.png"
+      "src": "/assets/stickers/winter/sparkles.webp"
     },
     {
       "id": "bell",
       "label": "铃铛",
       "material": "foil",
-      "src": "/assets/stickers/winter/bell.png"
+      "src": "/assets/stickers/winter/bell.webp"
     },
     {
       "id": "moon",
       "label": "弯月",
       "material": "foil",
-      "src": "/assets/stickers/winter/moon.png"
+      "src": "/assets/stickers/winter/moon.webp"
     },
     {
       "id": "snowflake",
       "label": "雪花",
       "material": "pearl",
-      "src": "/assets/stickers/winter/snowflake.png"
+      "src": "/assets/stickers/winter/snowflake.webp"
     },
     {
       "id": "cloud",
       "label": "云朵",
       "material": "pearl",
-      "src": "/assets/stickers/winter/cloud.png"
+      "src": "/assets/stickers/winter/cloud.webp"
     },
     {
       "id": "holly",
       "label": "冬青",
       "material": "paint",
-      "src": "/assets/stickers/winter/holly.png"
+      "src": "/assets/stickers/winter/holly.webp"
     },
     {
       "id": "pine-tree",
       "label": "小松树",
       "material": "paint",
-      "src": "/assets/stickers/winter/pine-tree.png"
+      "src": "/assets/stickers/winter/pine-tree.webp"
     },
     {
       "id": "gift",
       "label": "礼物",
       "material": "paint",
-      "src": "/assets/stickers/winter/gift.png"
+      "src": "/assets/stickers/winter/gift.webp"
     },
     {
       "id": "bow",
       "label": "蝴蝶结",
       "material": "paint",
-      "src": "/assets/stickers/winter/bow.png"
+      "src": "/assets/stickers/winter/bow.webp"
     },
     {
       "id": "gingerbread",
       "label": "姜饼人",
       "material": "paint",
-      "src": "/assets/stickers/winter/gingerbread.png"
+      "src": "/assets/stickers/winter/gingerbread.webp"
     },
     {
       "id": "stocking",
       "label": "圣诞袜",
       "material": "paint",
-      "src": "/assets/stickers/winter/stocking.png"
+      "src": "/assets/stickers/winter/stocking.webp"
     }
   ]
 }

@@ -1,7 +1,7 @@
-"""Sticker intake: raw generated images -> clean transparent PNGs + manifest.
+"""Sticker intake: raw generated images -> clean transparent WebPs + manifest.
 
 Reads   assets-src/stickers/<set>/*.png   (raw images straight from the image model)
-Writes  public/assets/stickers/<set>/*.png (1024x1024 RGBA, subject centred)
+Writes  public/assets/stickers/<set>/*.webp (1024x1024 RGBA, subject centred)
         public/assets/stickers/<set>/manifest.json
 
 Image models often fake transparency (a painted checkerboard) or use a dark or
@@ -189,12 +189,12 @@ def main() -> int:
             continue
         label, material, mode = CATALOGUE[sid]
         try:
-            process(src, mode).save(out_dir / f"{sid}.png", optimize=True)
+            process(src, mode).save(out_dir / f"{sid}.webp", quality=90, alpha_quality=100, method=6)
         except (OSError, ValueError) as err:
             print(f"failed {src.name}: {err}", file=sys.stderr)
             continue
-        entries.append({"id": sid, "label": label, "material": material, "src": f"/assets/stickers/{sticker_set}/{sid}.png"})
-        print(f"ok   {src.name} -> {sid}.png ({material}, {mode})")
+        entries.append({"id": sid, "label": label, "material": material, "src": f"/assets/stickers/{sticker_set}/{sid}.webp"})
+        print(f"ok   {src.name} -> {sid}.webp ({material}, {mode})")
 
     order = list(CATALOGUE)
     entries.sort(key=lambda e: order.index(e["id"]))

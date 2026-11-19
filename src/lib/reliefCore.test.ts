@@ -66,7 +66,7 @@ describe("bakeSurfacePixels with a sticker mask", () => {
 });
 
 describe("parseStickerManifest", () => {
-  const good = { set: "winter", stickers: [{ id: "holly", label: "冬青", material: "paint", src: "/assets/stickers/winter/holly.png" }] };
+  const good = { set: "winter", stickers: [{ id: "holly", label: "冬青", material: "paint", src: "/assets/stickers/winter/holly.webp" }] };
 
   it("accepts the generated manifest", () => {
     expect(parseStickerManifest(good).stickers[0].id).toBe("holly");
