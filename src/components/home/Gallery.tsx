@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { BookOpen, BookOpenCheck } from "lucide-react";
 import { ChristmasCard3D } from "@/components/ChristmasCard3D";
 import { CARD_ASSETS } from "@/lib/cardAssets";
+import { track } from "@/lib/analytics/track";
 import { hideChristmasLoading } from "@/lib/loadingVeil";
 import { playSwipe } from "@/lib/sfx";
 import { CARD_TEMPLATES, TEMPLATE_MAP } from "@/lib/templates";
@@ -35,6 +36,7 @@ export function Gallery() {
   const toggleOpen = () => {
     setFocus(true);
     // The hinge sounds are cued by the 3D card itself, on the frame it moves.
+    if (!open) track("card_open", { template: templateId });
     setOpen((v) => !v);
   };
   // Stable for the card's lifetime (it reads the hand once at mount), so it

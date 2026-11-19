@@ -6,6 +6,7 @@ import { Pause, Play } from "lucide-react";
 import { ChristmasCard3D } from "@/components/ChristmasCard3D";
 import { EnvelopeScene } from "@/components/envelope/EnvelopeScene";
 import { CARD_ASSETS } from "@/lib/cardAssets";
+import { track } from "@/lib/analytics/track";
 import { lettersApi } from "@/lib/client/lettersApi";
 import { hideChristmasLoading } from "@/lib/loadingVeil";
 import type { PublicLetter } from "@/lib/letter/model";
@@ -63,6 +64,7 @@ export function LetterViewer({ id }: { id: string }) {
     setBroken(true);
     if (shouldRecordOpening(window.sessionStorage, id)) {
       lettersApi.markOpened(id).catch(() => undefined); // best effort: the card is already showing
+      track("letter_opened");
     }
   };
 

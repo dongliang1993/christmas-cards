@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Check, Copy, Inbox, Share2 } from "lucide-react";
+import { track } from "@/lib/analytics/track";
 
 interface Props {
   letterUrl: string;
@@ -24,6 +25,7 @@ export function SentPanel(props: Props) {
   const copy = async (text: string, which: "letter" | "outbox") => {
     try {
       await navigator.clipboard.writeText(text);
+      if (which === "letter") track("link_copied");
       setCopied(which);
       setTimeout(() => setCopied(null), 1600);
     } catch {
@@ -48,7 +50,12 @@ export function SentPanel(props: Props) {
           <button
             type="button"
             aria-label="分享"
-            onClick={() => navigator.share({ title: "给你的一封圣诞信", url: props.letterUrl }).catch(() => undefined)}
+            onClick={() =>
+              navigator
+                .share({ title: "给你的一封圣诞信", url: props.letterUrl })
+                .then(() => track("link_shared"))
+                .catch(() => undefined)
+            }
             className="rounded-lg p-2 text-stone-600 hover:bg-stone-200"
           >
             <Share2 className="h-4 w-4" />

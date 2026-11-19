@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { Caveat, Inter, Long_Cang } from "next/font/google";
+import Script from "next/script";
+import { EngagementTracker } from "@/components/EngagementTracker";
+import { STATS_PATH, TRACKED_DOMAIN, UMAMI_WEBSITE_ID } from "@/lib/analytics/umamiProxy";
 import "./globals.css";
 
 const inter = Inter({
@@ -66,6 +69,16 @@ export default function RootLayout({
           </div>
         </div>
         {children}
+        {/* Umami analytics through our own domain (lib/analytics/umamiProxy.ts);
+            data-domains keeps local dev and previews out of the numbers. */}
+        <Script
+          src={`${STATS_PATH}/script.js`}
+          data-website-id={UMAMI_WEBSITE_ID}
+          data-host-url={STATS_PATH}
+          data-domains={TRACKED_DOMAIN}
+          strategy="afterInteractive"
+        />
+        <EngagementTracker />
       </body>
     </html>
   );

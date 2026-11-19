@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { EditorShell } from "@/components/editor/EditorShell";
 import { EnvelopeScene } from "@/components/envelope/EnvelopeScene";
 import { CARD_ASSETS } from "@/lib/cardAssets";
+import { track } from "@/lib/analytics/track";
 import { lettersApi, type SentLetter } from "@/lib/client/lettersApi";
 import { readOutbox, rememberOutbox } from "@/lib/client/outboxStorage";
 import { hideChristmasLoading } from "@/lib/loadingVeil";
@@ -80,6 +81,7 @@ export function SenderFlow({ initialTemplate }: { initialTemplate: CardTemplateI
       const deliverAt = resolveDeliverAt(delivery, new Date(), new Date().getTimezoneOffset());
       const result = await lettersApi.send(toLetterDraft(draft), deliverAt, readOutbox(window.localStorage));
       rememberOutbox(window.localStorage, result.outboxId);
+      track("letter_sent", { template: draft.templateId, delivery: delivery.kind });
       setSent({ ...result, recipientName: draft.recipientName });
       setError(null);
       setStep("sent");
