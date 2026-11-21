@@ -25,6 +25,8 @@ export function LetterViewer({ id }: { id: string }) {
   const [letter, setLetter] = useState<PublicLetter | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [broken, setBroken] = useState(false);
+  /** The seal was broken on this visit: the envelope stays over the card until it has drawn. */
+  const [brokeHere, setBrokeHere] = useState(false);
   const [now, setNow] = useState(() => new Date());
   // The card arrives shut, exactly as it left the envelope (envelope spec §5); the recipient opens it.
   const [open, setOpen] = useState(false);
@@ -62,6 +64,7 @@ export function LetterViewer({ id }: { id: string }) {
 
   const onOpened = () => {
     setBroken(true);
+    setBrokeHere(true);
     if (shouldRecordOpening(window.sessionStorage, id)) {
       lettersApi.markOpened(id).catch(() => undefined); // best effort: the card is already showing
       track("letter_opened");
@@ -75,8 +78,10 @@ export function LetterViewer({ id }: { id: string }) {
   const content = letter.content;
   return (
     <main className="relative h-dvh w-screen overflow-hidden bg-[#fbfaf9] select-none">
-      {/* The envelope stays on top until the card underneath has drawn its first frame. */}
-      {(stage !== "card" || !content || !cardReady) && (
+      {/* The envelope: until the seal is broken, and right after breaking it until the
+          card underneath has drawn. A letter opened on an earlier visit goes straight to
+          the card (the loading veil covers its first moment), with no envelope first. */}
+      {(stage !== "card" || !content || (brokeHere && !cardReady)) && (
         <div className="absolute inset-0 z-10">
           <EnvelopeScene
             mode={stage === "transit" ? "transit" : "open"}
