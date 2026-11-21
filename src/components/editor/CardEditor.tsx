@@ -209,7 +209,8 @@ export function CardEditor({ state, dispatch, paper, page, zoom, preview, locked
         interactive={locked && page === "cover" && !preview}
         handleRef={card}
       />
-      {editing && <FocusOutline card={card} face={state.focusFace} />}
+      {/* Writing on the card: nothing framed, just the page and the caret. */}
+      {editing && !editingSlot && <FocusOutline card={card} face={state.focusFace} />}
       {editing && editingSlot && onEditSlot && (
         <SlotEditor
           card={card}

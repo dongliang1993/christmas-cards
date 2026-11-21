@@ -6,7 +6,7 @@ import { MATERIAL_PRESETS } from "@/lib/reliefCore";
 import { loadStickerManifest, loadStickerSurface } from "@/lib/stickers/stickerSurface";
 import { FACE_FRAMES, quadCorners } from "./elementLayout";
 import { slotPlacement, SLOTS } from "./slots";
-import { HINT_COLOR, INK_COLORS, renderSlotImage, renderTextImage, TEXT_LINE_FRACTION } from "./textCanvas";
+import { INK_COLORS, renderSlotImage, renderTextImage, TEXT_LINE_FRACTION } from "./textCanvas";
 
 /** A sticker at scale 1 is this fraction of its face's width. */
 export const STICKER_WIDTH_FRACTION = 0.3;
@@ -131,8 +131,7 @@ async function buildMaterial(e: LayerElement, anisotropy: number): Promise<{ mat
   }
   if (e.slot) {
     const frame = FACE_FRAMES[e.face];
-    const color = e.hint ? HINT_COLOR : INK_COLORS[e.ink];
-    const img = await renderSlotImage(e.text, e.slot, e.font, color, frame.width / frame.height);
+    const img = await renderSlotImage(e.text, e.slot, e.font, INK_COLORS[e.ink], frame.width / frame.height, Boolean(e.hint));
     const material = new THREE.MeshStandardMaterial({
       ...SHARED_MATERIAL,
       map: canvasTexture(img.canvas, true, anisotropy),

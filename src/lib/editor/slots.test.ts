@@ -5,7 +5,6 @@ import {
   displayElements,
   duplicateDraft,
   editorReducer,
-  GREETING_PREFIX,
   slotFont,
   slotText,
   toLetterDraft,
@@ -25,9 +24,9 @@ describe("a fresh card's text", () => {
     expect(JSON.stringify(d.elements)).not.toContain("winter moon");
   });
 
-  it("starts the greeting with Dear and leaves the signature empty", () => {
+  it("starts with an empty greeting and signature: Dear and the dash are printed, not written", () => {
     const d = createInitialDraft("winter-moonlight");
-    expect(slotText(d, "greeting")).toBe(GREETING_PREFIX);
+    expect(slotText(d, "greeting")).toBe("");
     expect(slotText(d, "signature")).toBe("");
   });
 
@@ -81,7 +80,7 @@ describe("what gets sent", () => {
   });
 
   it("keeps slots with words in them, without editor ids", () => {
-    const sent = toLetterDraft(run(fresh(), type("greeting", "Dear 小雨,"), type("body", "hi")).draft);
+    const sent = toLetterDraft(run(fresh(), type("greeting", "小雨"), type("body", "hi")).draft);
     expect(sent.elements.map((e) => e.kind === "text" && e.slot)).toEqual(["greeting", "body"]);
     expect(sent.elements.every((e) => !("uid" in e))).toBe(true);
   });
@@ -101,10 +100,21 @@ describe("hints in the editor", () => {
 
 describe("duplicateDraft", () => {
   it("clears the greeting and the body but keeps the signature", () => {
-    const s = run(fresh(), type("greeting", "Dear 阿树,"), type("body", "给阿树的话"), type("signature", "— 小林"));
+    const s = run(fresh(), type("greeting", "阿树"), type("body", "给阿树的话"), type("signature", "小林"));
     const copy = duplicateDraft(s.draft);
-    expect(slotText(copy, "greeting")).toBe(GREETING_PREFIX);
+    expect(slotText(copy, "greeting")).toBe("");
     expect(slotText(copy, "body")).toBe("");
-    expect(slotText(copy, "signature")).toBe("— 小林");
+    expect(slotText(copy, "signature")).toBe("小林");
+  });
+});
+
+describe("the recipient is the name in the greeting", () => {
+  it("follows the name as it is typed", () => {
+    const s = run(fresh(), type("greeting", "小"), type("greeting", "小雨 "));
+    expect(s.draft.recipientName).toBe("小雨");
+  });
+
+  it("is empty while no name is written", () => {
+    expect(run(fresh(), type("body", "hi")).draft.recipientName).toBe("");
   });
 });

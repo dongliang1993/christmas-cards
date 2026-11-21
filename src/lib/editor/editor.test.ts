@@ -3,7 +3,6 @@ import { LIMITS } from "@/lib/letter/model";
 import {
   createEditorState,
   createInitialDraft,
-  GREETING_PREFIX,
   slotFont,
   slotText,
   duplicateDraft,
@@ -117,7 +116,7 @@ describe("editorReducer", () => {
   });
 
   it("edits text content, font and ink", () => {
-    const s0 = fresh();
+    const s0 = run(fresh(), { type: "set-slot-text", slot: "body", text: "x" });
     const uid = s0.draft.elements[0].uid;
     const s = run(s0, { type: "update-text", uid, patch: { text: "Hi", font: "serif", ink: "gold" } });
     expect(s.draft.elements[0]).toMatchObject({ text: "Hi", font: "serif", ink: "gold" });
@@ -136,11 +135,7 @@ describe("editorReducer", () => {
   });
 
   it("changing the template keeps everything placed and can be undone", () => {
-    const before = run(fresh(), addSticker("inside-left", "a"), {
-      type: "update-text",
-      uid: fresh().draft.elements[0].uid,
-      patch: { text: "改过的祝福" },
-    });
+    const before = run(fresh(), addSticker("inside-left", "a"), { type: "set-slot-text", slot: "body", text: "改过的祝福" });
     const after = run(before, { type: "set-template", templateId: "snow-town" });
     expect(after.draft.templateId).toBe("snow-town");
     expect(after.draft.elements).toEqual(before.draft.elements);
@@ -194,10 +189,12 @@ describe("draft storage", () => {
     expect(loaded && toLetterDraft(loaded)).toEqual(toLetterDraft(draft));
   });
 
-  it("keeps the Dear greeting across a reload, though it is not sent", () => {
+  it("keeps the greeting's name across a reload, without the printed Dear", () => {
     const storage = memoryStorage();
-    saveDraft(storage, fresh().draft);
-    expect(loadDraft(storage) && slotText(loadDraft(storage)!, "greeting")).toBe(GREETING_PREFIX);
+    saveDraft(storage, run(fresh(), { type: "set-slot-text", slot: "greeting", text: "Dear 小雨," }).draft);
+    const loaded = loadDraft(storage)!;
+    expect(slotText(loaded, "greeting")).toBe("小雨");
+    expect(loaded.recipientName).toBe("小雨");
   });
 
   it("turns an old draft's first right-page text into the body and drops other free text", () => {

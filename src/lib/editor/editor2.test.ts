@@ -38,7 +38,7 @@ describe("focusFace", () => {
   });
 
   it("follows the page last added to or selected on", () => {
-    const s = run(fresh(), add("a", "inside-left"));
+    const s = run(fresh(), { type: "set-slot-text", slot: "body", text: "hi" }, add("a", "inside-left"));
     expect(s.focusFace).toBe("inside-left");
     const msg = s.draft.elements.find((e) => e.kind === "text")!.uid;
     const t = run(s, { type: "select", uid: msg });

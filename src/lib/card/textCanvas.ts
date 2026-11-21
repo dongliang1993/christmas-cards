@@ -1,6 +1,6 @@
 import type { FontId, Ink, TextSlot } from "@/lib/letter/model";
 import { splitTextLines } from "./elementLayout";
-import { SLOTS } from "./slots";
+import { slotCore, SLOTS } from "./slots";
 import { layoutSlotText, SLOT_FONT_FRACTION, SLOT_LINE_HEIGHT } from "./slotText";
 
 /** Rendering resolution: px per line of text. */
@@ -92,7 +92,13 @@ export async function renderSlotImage(
   font: FontId,
   color: string,
   faceAspect: number,
+  /** Empty slot in the editor: the placeholder in grey, the printed prefix still in ink. */
+  hint = false,
 ): Promise<{ canvas: HTMLCanvasElement; aspect: number }> {
+  const { prefix, suffix, placeholder } = SLOTS[slot];
+  const core = hint ? placeholder : slotCore(slot, text);
+  const coreColor = hint ? HINT_COLOR : color;
+  text = prefix + core + suffix;
   const family = fontFamily(font);
   const spec = (px: number) => `500 ${px}px ${family}`;
   try {
@@ -118,8 +124,22 @@ export async function renderSlotImage(
   ctx.fillStyle = color;
   ctx.textAlign = align;
   ctx.textBaseline = "middle";
-  const x = align === "left" ? 0 : canvas.width;
   const top = multiline ? 0 : (canvas.height - layout.lines.length * lineH) / 2;
-  layout.lines.forEach((line, i) => ctx.fillText(line, x, top + (i + 0.5) * lineH));
+  if (multiline) {
+    ctx.fillStyle = coreColor;
+    const x = align === "left" ? 0 : canvas.width;
+    layout.lines.forEach((line, i) => ctx.fillText(line, x, top + (i + 0.5) * lineH));
+  } else {
+    // One line in up to three inks: printed prefix · the sender's words · suffix.
+    const parts: [string, string][] = [[prefix, color], [core, coreColor], [suffix, hint ? HINT_COLOR : color]];
+    const total = parts.reduce((w, [t]) => w + ctx.measureText(t).width, 0);
+    let x = align === "left" ? 0 : canvas.width - total;
+    ctx.textAlign = "left";
+    for (const [t, c] of parts) {
+      ctx.fillStyle = c;
+      ctx.fillText(t, x, top + lineH / 2);
+      x += ctx.measureText(t).width;
+    }
+  }
   return { canvas, aspect: canvas.width / canvas.height };
 }

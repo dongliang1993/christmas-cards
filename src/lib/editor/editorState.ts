@@ -1,9 +1,8 @@
 import { nanoid } from "nanoid";
 import { FIXED_SEAL } from "@/lib/envelope/fixedSeal";
-import { SLOTS, slotPlacement, TEXT_SLOTS } from "@/lib/card/slots";
+import { slotCore, SLOTS, slotPlacement, TEXT_SLOTS } from "@/lib/card/slots";
 import { LIMITS, type CardElement, type Face, type FontId, type Ink, type LetterDraft, type Placement, type TextSlot } from "@/lib/letter/model";
 import { TEMPLATE_MAP } from "@/lib/templates";
-import { greetingFor, nameFromGreeting } from "./greeting";
 import type { CardTemplateId } from "@/lib/types";
 
 /** Undo history depth (spec §4.3). */
@@ -54,9 +53,6 @@ export type EditorAction =
   | { type: "focus-face"; face: Face }
   | { type: "load"; draft: EditorDraft };
 
-/** The greeting a card starts with; the name after it is the sender's to write. */
-export const GREETING_PREFIX = "Dear ";
-
 function fontFor(text: string): FontId {
   return /[㐀-鿿]/.test(text) ? "hand-zh" : "hand-en";
 }
@@ -84,10 +80,9 @@ export function slotFont(draft: Pick<EditorDraft, "elements" | "templateId">, sl
   return slotElement(draft.elements, slot)?.font ?? defaultFont(draft.templateId);
 }
 
-/** A slot with nothing of the sender's in it: empty, or a greeting that is only "Dear". */
+/** A slot with nothing of the sender's in it (the printed "Dear " and "— " don't count). */
 export function isBlankSlot(slot: TextSlot, text: string): boolean {
-  const t = text.trim();
-  return t === "" || (slot === "greeting" && /^dear[\s,，]*$/i.test(t));
+  return slotCore(slot, text).trim() === "";
 }
 
 const slotLimit = (slot: TextSlot) => (SLOTS[slot].multiline ? LIMITS.textLength : LIMITS.slotLineLength);
@@ -108,7 +103,7 @@ function writeSlot(draft: EditorDraft, slot: TextSlot, patch: { text?: string; f
 export function displayElements(draft: Pick<EditorDraft, "elements" | "templateId">): (EditorElement & { hint?: boolean })[] {
   const shown = draft.elements.filter((e) => !(e.kind === "text" && e.slot && isBlankSlot(e.slot, e.text)));
   const hints = TEXT_SLOTS.filter((slot) => isBlankSlot(slot, slotText(draft, slot))).map((slot) => ({
-    ...newSlotElement(slot, SLOTS[slot].hint, slotFont(draft, slot)),
+    ...newSlotElement(slot, "", slotFont(draft, slot)),
     uid: `hint-${slot}`,
     hint: true,
   }));
@@ -127,15 +122,15 @@ export function migrateDraftText(draft: EditorDraft): EditorDraft {
   if (firstFree?.kind === "text" && !slotElement(elements, "body")) {
     elements = [...elements, { ...newSlotElement("body", firstFree.text.slice(0, LIMITS.textLength), firstFree.font), uid: firstFree.uid }];
   }
-  const greeting = slotElement(elements, "greeting");
-  const fromRecipient = draft.recipientName.trim() ? greetingFor(draft.recipientName) : GREETING_PREFIX;
-  if (!greeting) {
-    elements = [...elements, newSlotElement("greeting", fromRecipient, defaultFont(draft.templateId))];
-  } else if (isBlankSlot("greeting", greeting.text)) {
-    elements = elements.map((e) => (e === greeting ? { ...greeting, text: fromRecipient } : e));
+  // Greeting and signature keep only the sender's words; "Dear " and "— " are printed.
+  elements = elements.map((e) => (e.kind === "text" && e.slot && e.slot !== "body" ? { ...e, text: slotCore(e.slot, e.text) } : e));
+  const name = draft.recipientName.trim();
+  if (name && isBlankSlot("greeting", slotText({ elements }, "greeting"))) {
+    elements = slotElement(elements, "greeting")
+      ? elements.map((e) => (e.kind === "text" && e.slot === "greeting" ? { ...e, text: name } : e))
+      : [...elements, newSlotElement("greeting", name, defaultFont(draft.templateId))];
   }
-  const migrated = { ...draft, elements, envelopeColor: "ivory" as const };
-  return { ...migrated, recipientName: nameFromGreeting(slotText(migrated, "greeting")) };
+  return { ...draft, elements, envelopeColor: "ivory", recipientName: slotText({ elements }, "greeting").trim() };
 }
 
 export function createInitialDraft(templateId: CardTemplateId): EditorDraft {
@@ -145,7 +140,7 @@ export function createInitialDraft(templateId: CardTemplateId): EditorDraft {
     envelopeColor: "ivory",
     seal: { ...FIXED_SEAL },
     recipientName: "",
-    elements: [newSlotElement("greeting", GREETING_PREFIX, defaultFont(templateId))],
+    elements: [],
     audioUrl: null,
     audioName: null,
   };
@@ -172,7 +167,7 @@ export function withEditorIds(draft: LetterDraft): EditorDraft {
 export function duplicateDraft(draft: EditorDraft): EditorDraft {
   const elements = draft.elements
     .filter((e) => !(e.kind === "text" && e.slot === "body"))
-    .map((e) => ({ ...e, uid: nanoid(8), ...(e.kind === "text" && e.slot === "greeting" ? { text: GREETING_PREFIX } : {}) }));
+    .map((e) => ({ ...e, uid: nanoid(8), ...(e.kind === "text" && e.slot === "greeting" ? { text: "" } : {}) }));
   return { ...draft, recipientName: "", elements };
 }
 
@@ -211,7 +206,7 @@ function isSlot(elements: EditorElement[], uid: string): boolean {
 export function editorReducer(state: EditorState, action: EditorAction): EditorState {
   const next = reduce(state, action);
   // The recipient is the name in the greeting (spec §6.4): there is no other place to write it.
-  const recipientName = nameFromGreeting(slotText(next.draft, "greeting"));
+  const recipientName = slotText(next.draft, "greeting").trim();
   return recipientName === next.draft.recipientName ? next : { ...next, draft: { ...next.draft, recipientName } };
 }
 
