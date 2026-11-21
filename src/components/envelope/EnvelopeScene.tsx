@@ -250,8 +250,13 @@ export function EnvelopeScene({ mode, envelopeColor, seal, coverSrc, paper = "co
         wax.group.visible = spread > 0.01 && v.crack < 1;
         const target = sealState.stage === "sealed" || sealState.stage === "breaking" ? 1 : spread;
         if (wax.group.visible && spreadChanged(target)) wax.setSpread(target);
+        // Hot wax is wet and glossy with a faint warm glow; it dulls as it cools
+        // to the finished seal. (A strong glow flattened it to orange plastic.)
+        const heat = sealState.stage === "idle" ? 0 : 1 - v.cool;
         for (const m of wax.material) {
-          m.emissiveIntensity = sealState.stage === "idle" ? 0 : (1 - v.cool) * 0.9;
+          m.emissiveIntensity = heat * 0.18;
+          m.roughness = 0.32 - 0.2 * heat;
+          m.clearcoatRoughness = 0.16 - 0.1 * heat;
           m.opacity = 1 - Math.max(0, v.crack - 0.5) * 2;
         }
         const split = 0.06 * easeOut(v.crack);

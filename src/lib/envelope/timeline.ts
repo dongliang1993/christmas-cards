@@ -75,15 +75,21 @@ const mixCam = (a: CameraPose, b: CameraPose, s: number): CameraPose => ({
   oblique: mix(a.oblique, b.oblique, s),
 });
 
-/** Card depth for a card whose centre is localY above the envelope's centre. */
-function depthFor(localY: number): number {
+/** 1 while the card's bottom is well clear of the mouth, 0 once it is in the pocket. */
+function hoverShare(localY: number): number {
   const bottom = localY - CARD_H / 2;
   const above = clamp01((bottom - POCKET_MOUTH_Y) / 0.4);
-  return mix(CARD_SLOT_Z, HOVER_Z, above * above * (3 - 2 * above));
+  return above * above * (3 - 2 * above);
 }
 
-function cardAt(envY: number, localY: number, tilt: typeof HOVER_TILT): CardPose {
-  return { x: 0, y: envY + localY, z: depthFor(localY), ...tilt };
+/**
+ * The card at localY above the envelope's centre. Its depth and its hover tilt
+ * change together: a card still tilted back at pocket depth would tip behind
+ * the open flap, which then shows through it.
+ */
+function cardAt(envY: number, localY: number): CardPose {
+  const s = hoverShare(localY);
+  return { x: 0, y: envY + localY, z: mix(CARD_SLOT_Z, HOVER_Z, s), ...mixTilt(INSIDE_TILT, HOVER_TILT, s) };
 }
 
 function mixTilt(a: typeof HOVER_TILT, b: typeof HOVER_TILT, s: number) {
@@ -116,7 +122,7 @@ export function sealPose(time: number): EnvelopePose {
       rotZ: mix(CARD_REST.rotZ, HOVER_TILT.rotZ, lift),
     };
   } else {
-    card = cardAt(envY, mix(HOVER_Y, CARD_IN_Y, insert), mixTilt(HOVER_TILT, INSIDE_TILT, insert));
+    card = cardAt(envY, mix(HOVER_Y, CARD_IN_Y, insert));
   }
 
   const toWide = ease(seg(t, 0.2, 1.6));
@@ -141,7 +147,7 @@ export function openPose(time: number): EnvelopePose {
 
   const envY = mix(0, ENV_AWAY_Y, leave);
   const localY = mix(CARD_IN_Y, HOVER_Y, out);
-  let card = cardAt(0, localY, mixTilt(INSIDE_TILT, HOVER_TILT, out));
+  let card = cardAt(0, localY);
   if (leave > 0) {
     card = {
       x: 0,

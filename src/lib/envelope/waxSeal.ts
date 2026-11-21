@@ -210,7 +210,7 @@ export function buildWaxSeal(seal: Seal): WaxSealParts {
         sheen: 0.3,
         sheenColor: new THREE.Color("#ffb08a"),
         sheenRoughness: 0.5,
-        emissive: new THREE.Color("#ff6a1f"),
+        emissive: new THREE.Color("#c8361a"),
         emissiveIntensity: 0,
         clippingPlanes: [plane],
         transparent: true,
