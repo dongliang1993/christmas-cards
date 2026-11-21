@@ -191,7 +191,7 @@ export function CardEditor({ state, dispatch, paper, page, zoom, preview, locked
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
-      style={{ cursor: page === "cover" && !preview && !locked ? "pointer" : "default" }}
+      style={{ cursor: page === "cover" && !preview ? (locked ? "grab" : "pointer") : "default" }}
     >
       <ChristmasCard3D
         templateId={state.draft.templateId}
@@ -204,7 +204,9 @@ export function CardEditor({ state, dispatch, paper, page, zoom, preview, locked
         )}
         paper={paper}
         zoom={zoom * editorFit()}
-        interactive={false}
+        // The style picker shows the cover only: drag to turn it, but with no
+        // onToggleOpen a tap cannot open it (the cover's own sparkles still play).
+        interactive={locked && page === "cover" && !preview}
         handleRef={card}
       />
       {editing && <FocusOutline card={card} face={state.focusFace} />}
