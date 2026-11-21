@@ -17,20 +17,22 @@ import { resolveDeliverAt } from "@/lib/letter/delivery";
 import type { DeliveryChoice } from "@/lib/letter/model";
 import type { CardTemplateId } from "@/lib/types";
 import { letterDraftSchema } from "@/lib/letter/schema";
-import { AddressPanel } from "./AddressPanel";
 import { EnvelopeStage } from "./EnvelopeStage";
 import { SendPanel } from "./SendPanel";
 import { SentPanel } from "./SentPanel";
 
-type Step = "make" | "address" | "seal" | "send" | "sent";
+type Step = "make" | "seal" | "send" | "sent";
 
 const STEPS: { id: Exclude<Step, "sent">; label: string }[] = [
   { id: "make", label: "做卡" },
-  { id: "address", label: "信封" },
   { id: "seal", label: "封装" },
 ];
 
-/** 做卡 → 写收件人、选信封 → 封装 → 寄出 (spec §4, §13; envelope spec §4). */
+/**
+ * 做卡 → 封装 → 寄出 (spec §4, §13; mobile editor spec §6.4). There is no
+ * envelope step: the recipient is the name in the greeting and every
+ * envelope is ivory.
+ */
 export function SenderFlow({ initialTemplate }: { initialTemplate: CardTemplateId }) {
   const [state, dispatch] = useReducer(editorReducer, undefined, () => createEditorState(createInitialDraft(initialTemplate)));
   const [step, setStep] = useState<Step>("make");
@@ -44,6 +46,8 @@ export function SenderFlow({ initialTemplate }: { initialTemplate: CardTemplateI
   const [sent, setSent] = useState<(SentLetter & { recipientName: string }) | null>(null);
   const [restored, setRestored] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
+  /** Bumped when 下一步 needs a name: the editor opens the greeting to write it. */
+  const [askName, setAskName] = useState(0);
   const draft = state.draft;
 
   // Restore the draft in progress once, then keep saving it.
@@ -61,6 +65,11 @@ export function SenderFlow({ initialTemplate }: { initialTemplate: CardTemplateI
   }, [draft, restored]);
 
   const toSeal = () => {
+    if (draft.recipientName.trim() === "") {
+      setError(null);
+      setAskName((n) => n + 1);
+      return;
+    }
     const parsed = letterDraftSchema.safeParse(toLetterDraft(draft));
     if (!parsed.success) return setError(parsed.error.issues[0]?.message ?? "还有内容没填好");
     setError(null);
@@ -127,23 +136,13 @@ export function SenderFlow({ initialTemplate }: { initialTemplate: CardTemplateI
           })}
         </ol>
         {step === "make" && (
-          <button type="button" onClick={() => setStep("address")} className="rounded-lg bg-stone-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-stone-800">
+          <button type="button" onClick={toSeal} className="rounded-lg bg-stone-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-stone-800">
             下一步
           </button>
         )}
-        {step === "address" && (
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setStep("make")} className="rounded-lg border border-stone-200 px-3 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-50">
-              上一步
-            </button>
-            <button type="button" onClick={toSeal} className="rounded-lg bg-stone-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-stone-800">
-              下一步
-            </button>
-          </div>
-        )}
         {(step === "seal" || step === "send") && (
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setStep(step === "send" ? "seal" : "address")} className="rounded-lg border border-stone-200 px-3 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-50">
+            <button type="button" onClick={() => setStep(step === "send" ? "seal" : "make")} className="rounded-lg border border-stone-200 px-3 py-1.5 text-xs font-medium text-stone-700 hover:bg-stone-50">
               上一步
             </button>
             {step === "seal" && alreadySealed && (
@@ -156,6 +155,11 @@ export function SenderFlow({ initialTemplate }: { initialTemplate: CardTemplateI
         {step === "sent" && <span className="w-[76px]" />}
       </header>
 
+      {error && step === "make" && (
+        <p role="alert" className="shrink-0 bg-red-50 px-3 py-1.5 text-center text-xs text-red-600">
+          {error}
+        </p>
+      )}
       {saveFailed && (
         <p role="alert" className="shrink-0 bg-red-50 px-3 py-1.5 text-center text-xs text-red-600">
           没能自动保存，这次的改动刷新后会丢失。
@@ -166,34 +170,19 @@ export function SenderFlow({ initialTemplate }: { initialTemplate: CardTemplateI
       )}
 
       <div className="relative min-h-0 flex-1">
-        {step === "make" && <EditorShell state={state} dispatch={dispatch} initialTool="style" />}
-        {(step === "address" || step === "seal" || step === "send") && (
+        {step === "make" && <EditorShell state={state} dispatch={dispatch} initialTool="style" askName={askName} />}
+        {(step === "seal" || step === "send") && (
           <EnvelopeStage
-            open={step !== "seal" || !envelopeReady}
+            open={step === "send"}
             panel={
               step === "send" ? (
                 <div className="flex h-full items-center">
                   <SendPanel recipientName={draft.recipientName} delivery={delivery} sending={sending} error={error} onDelivery={setDelivery} onSend={send} />
                 </div>
-              ) : (
-                <AddressPanel
-                  recipientName={draft.recipientName}
-                  envelopeColor={draft.envelopeColor}
-                  error={error}
-                  onChange={(p) =>
-                    dispatch({
-                      type: "set",
-                      patch: {
-                        ...(p.recipientName !== undefined ? { recipientName: p.recipientName } : {}),
-                        ...(p.envelopeColor ? { envelopeColor: p.envelopeColor } : {}),
-                      },
-                    })
-                  }
-                />
-              )
+              ) : null
             }
           >
-            {step !== "address" && (
+            {(
               <EnvelopeScene
                 mode="seal"
                 envelopeColor={draft.envelopeColor}
@@ -208,8 +197,8 @@ export function SenderFlow({ initialTemplate }: { initialTemplate: CardTemplateI
                 }}
               />
             )}
-            {/* The 信封 step's card stays on top until the envelope has drawn its first frame. */}
-            {(step === "address" || !envelopeReady) && (
+            {/* The card stays on top until the envelope has drawn its first frame. */}
+            {!envelopeReady && (
               <div className="absolute inset-0 z-10">
                 <ChristmasCard3D templateId={draft.templateId} message="" signature="" isOpen={false} isPaused={false} elements={draft.elements} paper={draft.paper} />
               </div>

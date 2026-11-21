@@ -5,7 +5,6 @@ import { createEditorState, createInitialDraft, editorReducer, slotText, type Ed
 const run = (s: EditorState, ...actions: EditorAction[]) => actions.reduce(editorReducer, s);
 const fresh = () => createEditorState(createInitialDraft("winter-moonlight"));
 const greet = (text: string): EditorAction => ({ type: "set-slot-text", slot: "greeting", text });
-const recipient = (name: string): EditorAction => ({ type: "set", patch: { recipientName: name } });
 
 describe("nameFromGreeting", () => {
   it("takes the words between Dear and the comma", () => {
@@ -23,28 +22,18 @@ describe("nameFromGreeting", () => {
   });
 });
 
-describe("greeting and recipient follow each other", () => {
-  it("fills an empty recipient from the greeting and keeps following it", () => {
+describe("the recipient comes from the greeting", () => {
+  it("follows the name as it is typed", () => {
     const s = run(fresh(), greet("Dear 小"), greet("Dear 小雨,"));
     expect(s.draft.recipientName).toBe("小雨");
   });
 
-  it("stops following once the recipient is typed by hand", () => {
-    const s = run(fresh(), greet("Dear 小雨,"), recipient("雨姐"), greet("Dear 小雨同学,"));
-    expect(s.draft.recipientName).toBe("雨姐");
+  it("is empty while the greeting has no name", () => {
+    const s = run(fresh(), greet("Hi 阿树!"));
+    expect(s.draft.recipientName).toBe("");
   });
 
-  it("writes the greeting from the recipient while the greeting is untouched", () => {
-    const s = run(fresh(), recipient("阿树"));
-    expect(slotText(s.draft, "greeting")).toBe("Dear 阿树,");
-  });
-
-  it("leaves a greeting the sender wrote alone", () => {
-    const s = run(fresh(), greet("Hi 阿树!"), recipient("小林"));
-    expect(slotText(s.draft, "greeting")).toBe("Hi 阿树!");
-  });
-
-  it("does not let an auto-filled recipient overwrite the greeting in a loop", () => {
+  it("leaves the greeting as the sender wrote it", () => {
     const s = run(fresh(), greet("Dear 小雨,"));
     expect(slotText(s.draft, "greeting")).toBe("Dear 小雨,");
   });

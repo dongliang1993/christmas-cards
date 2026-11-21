@@ -24,6 +24,8 @@ interface Props {
   dispatch: Dispatch<EditorAction>;
   /** Where the editor opens. From the gallery it starts on the style picker. */
   initialTool?: Tool;
+  /** Bumped by 下一步 when the greeting has no name yet: open it to write one. */
+  askName?: number;
 }
 
 function IconButton(props: { label: string; onClick(): void; disabled?: boolean; active?: boolean; children: React.ReactNode }) {
@@ -46,7 +48,7 @@ function IconButton(props: { label: string; onClick(): void; disabled?: boolean;
  * 做卡 step (spec §13.2): tool rail · canvas with page nav · context panel,
  * with zoom / undo / redo / preview underneath. Preview keeps the same pages.
  */
-export function EditorShell({ state, dispatch, initialTool = "stickers" }: Props) {
+export function EditorShell({ state, dispatch, initialTool = "stickers", askName = 0 }: Props) {
   const card = useRef<CardHandle | null>(null);
   const [tool, setTool] = useState<Tool>(initialTool);
   const [page, setPage] = useState<PageId>(initialTool === "style" ? "cover" : "inside");
@@ -71,6 +73,20 @@ export function EditorShell({ state, dispatch, initialTool = "stickers" }: Props
     return () => mq.removeEventListener("change", update);
   }, []);
   const pageIndex = PAGES.indexOf(page);
+
+  // 下一步 without a name: open the greeting right on the card and say why.
+  const [nameNudge, setNameNudge] = useState(false);
+  useEffect(() => {
+    if (askName === 0) return;
+    setPage("inside");
+    dispatch({ type: "select", uid: null });
+    editSlot("greeting");
+    setNameNudge(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [askName]);
+  useEffect(() => {
+    if (editingSlot !== "greeting") setNameNudge(false);
+  }, [editingSlot]);
 
   const goPage = (next: PageId) => {
     if (next === page) return;
@@ -130,6 +146,11 @@ export function EditorShell({ state, dispatch, initialTool = "stickers" }: Props
 
         <div className="relative order-1 flex min-h-0 min-w-0 flex-1 flex-col lg:order-none">
           <div className="relative min-h-0 flex-1">
+            {nameNudge && (
+              <p role="status" className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full bg-stone-900 px-3.5 py-1.5 text-xs text-white shadow-lg">
+                在「Dear」后面写上 TA 的名字，寄件箱里靠它区分每一封
+              </p>
+            )}
             <CardEditor state={state} dispatch={dispatch} paper={state.draft.paper} page={page} zoom={zoom} preview={preview} locked={tool === "style"} onPage={goPage} card={card} editingSlot={editingSlot} onEditSlot={editSlot} />
           </div>
           <div className="flex shrink-0 items-center justify-center gap-3 pb-2 text-xs text-stone-500">

@@ -3,7 +3,7 @@ import { FIXED_SEAL } from "@/lib/envelope/fixedSeal";
 import { SLOTS, slotPlacement, TEXT_SLOTS } from "@/lib/card/slots";
 import { LIMITS, type CardElement, type Face, type FontId, type Ink, type LetterDraft, type Placement, type TextSlot } from "@/lib/letter/model";
 import { TEMPLATE_MAP } from "@/lib/templates";
-import { greetingFor, linksFor, nameFromGreeting, type GreetingLinks } from "./greeting";
+import { greetingFor, nameFromGreeting } from "./greeting";
 import type { CardTemplateId } from "@/lib/types";
 
 /** Undo history depth (spec §4.3). */
@@ -29,8 +29,6 @@ export interface EditorState {
   future: Snapshot[];
   /** The inside page new stickers and text land on (spec §13.4). */
   focusFace: Face;
-  /** Greeting ↔ recipient auto-fill (mobile editor spec §6.4). */
-  links: GreetingLinks;
 }
 
 type EnvelopeFields = Pick<
@@ -129,10 +127,15 @@ export function migrateDraftText(draft: EditorDraft): EditorDraft {
   if (firstFree?.kind === "text" && !slotElement(elements, "body")) {
     elements = [...elements, { ...newSlotElement("body", firstFree.text.slice(0, LIMITS.textLength), firstFree.font), uid: firstFree.uid }];
   }
-  if (!slotElement(elements, "greeting")) {
-    elements = [...elements, newSlotElement("greeting", GREETING_PREFIX, defaultFont(draft.templateId))];
+  const greeting = slotElement(elements, "greeting");
+  const fromRecipient = draft.recipientName.trim() ? greetingFor(draft.recipientName) : GREETING_PREFIX;
+  if (!greeting) {
+    elements = [...elements, newSlotElement("greeting", fromRecipient, defaultFont(draft.templateId))];
+  } else if (isBlankSlot("greeting", greeting.text)) {
+    elements = elements.map((e) => (e === greeting ? { ...greeting, text: fromRecipient } : e));
   }
-  return { ...draft, elements };
+  const migrated = { ...draft, elements, envelopeColor: "ivory" as const };
+  return { ...migrated, recipientName: nameFromGreeting(slotText(migrated, "greeting")) };
 }
 
 export function createInitialDraft(templateId: CardTemplateId): EditorDraft {
@@ -149,9 +152,7 @@ export function createInitialDraft(templateId: CardTemplateId): EditorDraft {
 }
 
 export function createEditorState(draft: EditorDraft): EditorState {
-  const greeting = slotText(draft, "greeting");
-  const links = linksFor(greeting, draft.recipientName, isBlankSlot("greeting", greeting));
-  return { draft, selected: null, past: [], future: [], focusFace: "inside-right", links };
+  return { draft, selected: null, past: [], future: [], focusFace: "inside-right" };
 }
 
 /** The draft as the API and storage see it, without editor ids. */
@@ -207,26 +208,11 @@ function isSlot(elements: EditorElement[], uid: string): boolean {
   return elements.some((e) => e.uid === uid && e.kind === "text" && e.slot !== undefined);
 }
 
-/** The sender typed the greeting: the recipient follows while it is not their own. */
-function afterGreeting(state: EditorState, text: string): EditorState {
-  const links = { ...state.links, greeting: isBlankSlot("greeting", text) };
-  const draft = links.recipient ? { ...state.draft, recipientName: nameFromGreeting(text) } : state.draft;
-  return { ...state, draft, links };
-}
-
-/** The sender typed the recipient: the greeting follows while it is untouched. */
-function afterRecipient(state: EditorState, name: string): EditorState {
-  const links = { ...state.links, recipient: name.trim() === "" };
-  if (!links.greeting) return { ...state, links };
-  const greeting = name.trim() === "" ? GREETING_PREFIX : greetingFor(name);
-  return { ...state, links, draft: { ...state.draft, elements: writeSlot(state.draft, "greeting", { text: greeting }) } };
-}
-
 export function editorReducer(state: EditorState, action: EditorAction): EditorState {
   const next = reduce(state, action);
-  if (action.type === "set-slot-text" && action.slot === "greeting") return afterGreeting(next, slotText(next.draft, "greeting"));
-  if (action.type === "set" && action.patch.recipientName !== undefined) return afterRecipient(next, action.patch.recipientName);
-  return next;
+  // The recipient is the name in the greeting (spec §6.4): there is no other place to write it.
+  const recipientName = nameFromGreeting(slotText(next.draft, "greeting"));
+  return recipientName === next.draft.recipientName ? next : { ...next, draft: { ...next.draft, recipientName } };
 }
 
 function reduce(state: EditorState, action: EditorAction): EditorState {

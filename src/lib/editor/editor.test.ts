@@ -123,9 +123,9 @@ describe("editorReducer", () => {
     expect(s.draft.elements[0]).toMatchObject({ text: "Hi", font: "serif", ink: "gold" });
   });
 
-  it("sets envelope fields without touching elements", () => {
-    const s = run(fresh(), { type: "set", patch: { recipientName: "阿树", paper: "kraft" } });
-    expect(s.draft).toMatchObject({ recipientName: "阿树", paper: "kraft" });
+  it("sets card fields such as the paper", () => {
+    const s = run(fresh(), { type: "set", patch: { paper: "kraft" } });
+    expect(s.draft.paper).toBe("kraft");
   });
 
   it("copies a sticker slightly offset, on top, and selects the copy", () => {
