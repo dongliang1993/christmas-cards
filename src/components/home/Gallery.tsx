@@ -1,9 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { BookOpen, BookOpenCheck } from "lucide-react";
+import Link from "next/link";
+import { BookOpen, BookOpenCheck, PenLine } from "lucide-react";
 import { ChristmasCard3D } from "@/components/ChristmasCard3D";
 import { CARD_ASSETS } from "@/lib/cardAssets";
+import { editorHref } from "@/lib/editor/editorLinks";
 import { track } from "@/lib/analytics/track";
 import { hideChristmasLoading } from "@/lib/loadingVeil";
 import { playSwipe } from "@/lib/sfx";
@@ -113,6 +115,15 @@ export function Gallery() {
         >
           {open ? <BookOpenCheck className="h-5 w-5" /> : <BookOpen className="h-5 w-5" />}
         </button>
+        {/* Spec §13.1: start making the card that is on screen right now. */}
+        <Link
+          href={editorHref(templateId)}
+          onClick={() => track("card_make", { template: templateId })}
+          className="ml-0.5 flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-stone-900 px-3.5 text-sm font-medium text-white transition hover:bg-stone-800"
+        >
+          <PenLine className="h-4 w-4" />
+          <span className="whitespace-nowrap">制作贺卡</span>
+        </Link>
       </nav>
     </main>
   );

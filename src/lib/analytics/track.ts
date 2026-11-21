@@ -7,6 +7,7 @@ import type { Milestone } from "./engagement";
  */
 export type AnalyticsEvent =
   | "card_open" // a visitor opened a card on the home page
+  | "card_make" // a visitor chose a card on the home page and started making it
   | "letter_sent" // a letter was sealed and sent
   | "link_copied" // the sender copied the letter link
   | "link_shared" // the sender used the system share sheet
