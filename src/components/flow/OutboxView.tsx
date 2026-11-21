@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Toast, useToast } from "@/components/Toast";
+import { copyText } from "@/lib/client/clipboard";
 import { lettersApi } from "@/lib/client/lettersApi";
 import { rememberOutbox } from "@/lib/client/outboxStorage";
 import { hideChristmasLoading } from "@/lib/loadingVeil";
@@ -21,6 +23,7 @@ export function OutboxView({ outboxId }: { outboxId: string }) {
   const [letters, setLetters] = useState<OutboxEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const { toast, show } = useToast();
 
   // No 3D scene on this page: drop the loading veil as soon as React mounts.
   useEffect(() => {
@@ -40,12 +43,12 @@ export function OutboxView({ outboxId }: { outboxId: string }) {
 
   const copy = async (id: string) => {
     const url = `${window.location.origin}/letter/${id}`;
-    try {
-      await navigator.clipboard.writeText(url);
+    if (await copyText(url)) {
       setCopied(id);
       setTimeout(() => setCopied(null), 1500);
-    } catch {
-      window.prompt("复制这个链接", url);
+      show({ tone: "ok", text: "链接已复制" });
+    } else {
+      show({ tone: "error", text: "没能自动复制，请打开这封信后复制地址" });
     }
   };
 
@@ -95,6 +98,7 @@ export function OutboxView({ outboxId }: { outboxId: string }) {
           ))}
         </ul>
       </div>
+      <Toast toast={toast} />
     </main>
   );
 }
