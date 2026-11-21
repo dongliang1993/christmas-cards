@@ -8,6 +8,13 @@ import { FACE_FRAMES, quadCorners } from "./elementLayout";
 import { slotPlacement, SLOTS } from "./slots";
 import { INK_COLORS, renderSlotImage, renderTextImage, TEXT_LINE_FRACTION } from "./textCanvas";
 
+/**
+ * How strongly foil stickers reflect the studio. The scene's own environment is
+ * kept dim (0.25) for the cover; metal barely takes the ambient light that
+ * brightens the paper, so at 0.25 foil read as dark bronze between glints.
+ */
+export const FOIL_ENV_INTENSITY = 1.0;
+
 /** A sticker at scale 1 is this fraction of its face's width. */
 export const STICKER_WIDTH_FRACTION = 0.3;
 /** Columns of the element quad: enough to follow the panel's bow smoothly. */
@@ -127,6 +134,10 @@ async function buildMaterial(e: LayerElement, anisotropy: number): Promise<{ mat
     const material = iridescence > 0
       ? new THREE.MeshPhysicalMaterial({ ...params, iridescence, iridescenceIOR: 1.6 })
       : new THREE.MeshStandardMaterial(params);
+    if (entry.material === "foil") {
+      material.envMapIntensity = FOIL_ENV_INTENSITY;
+      material.userData.foil = true;
+    }
     return { material, aspect: sticker.aspect, widthFraction: STICKER_WIDTH_FRACTION };
   }
   if (e.slot) {
@@ -197,6 +208,16 @@ export function createElementLayer(mounts: Record<Face, FaceMount>, anisotropy: 
       entry.mesh = new THREE.Mesh(new THREE.BufferGeometry(), built.material);
       entry.mesh.userData.uid = entry.key;
       entry.mesh.renderOrder = 2 + entry.element.z;
+      if (built.material.userData.foil) {
+        // three honours a material's envMapIntensity only when the material
+        // holds the environment itself, so foil borrows the scene's on first draw.
+        entry.mesh.onBeforeRender = (_renderer, scene, _camera, _geometry, material) => {
+          const m = material as THREE.MeshStandardMaterial;
+          if (m.envMap || !scene.environment) return;
+          m.envMap = scene.environment;
+          m.needsUpdate = true;
+        };
+      }
       place(entry);
     } catch (error) {
       console.error("[card] element failed to load", error);
