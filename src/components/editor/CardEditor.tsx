@@ -93,7 +93,32 @@ function FocusOutline({ card, face }: { card: RefObject<CardHandle | null>; face
  * The card is the canvas (spec §4.3, §13): pick, drag, pinch and handles act
  * on the 3D pages directly. Tapping an element on either page edits it.
  */
+/**
+ * The slot just left keeps its field on screen for two frames, until the card
+ * has drawn that slot again: no blank frame between field and drawn text.
+ */
+function useLingering(slot: TextSlot | null): TextSlot | null {
+  const [lingering, setLingering] = useState<TextSlot | null>(null);
+  const previous = useRef<TextSlot | null>(slot);
+  useEffect(() => {
+    const left = previous.current;
+    previous.current = slot;
+    if (!left || left === slot) return;
+    setLingering(left);
+    let inner = 0;
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => setLingering(null));
+    });
+    return () => {
+      cancelAnimationFrame(outer);
+      cancelAnimationFrame(inner);
+    };
+  }, [slot]);
+  return lingering === slot ? null : lingering;
+}
+
 export function CardEditor({ state, dispatch, paper, page, zoom, preview, locked = false, onPage, card, editingSlot = null, onEditSlot }: Props) {
+  const lingering = useLingering(editingSlot);
   const pointers = useRef(new Map<number, Point>());
   const gesture = useRef<Gesture | null>(null);
   const editing = page === "inside" && !preview;
@@ -199,9 +224,13 @@ export function CardEditor({ state, dispatch, paper, page, zoom, preview, locked
         signature=""
         isOpen={page === "inside"}
         isPaused={false}
-        elements={(preview ? toLetterDraft(state.draft).elements : displayElements(state.draft)).filter(
-          (el) => !(editing && el.kind === "text" && el.slot && el.slot === editingSlot),
-        )}
+        elements={
+          preview
+            ? toLetterDraft(state.draft).elements
+            : displayElements(state.draft).map((el) =>
+                editing && el.kind === "text" && el.slot === editingSlot && editingSlot ? { ...el, hidden: true } : el,
+              )
+        }
         paper={paper}
         zoom={zoom * editorFit()}
         // The style picker shows the cover only: drag to turn it, but with no
@@ -211,8 +240,21 @@ export function CardEditor({ state, dispatch, paper, page, zoom, preview, locked
       />
       {/* Writing on the card: nothing framed, just the page and the caret. */}
       {editing && !editingSlot && <FocusOutline card={card} face={state.focusFace} />}
+      {editing && lingering && (
+        <SlotEditor
+          key={`linger-${lingering}`}
+          card={card}
+          slot={lingering}
+          text={slotText(state.draft, lingering)}
+          font={slotFont(state.draft, lingering)}
+          inert
+          onChange={() => undefined}
+          onDone={() => undefined}
+        />
+      )}
       {editing && editingSlot && onEditSlot && (
         <SlotEditor
+          key={editingSlot}
           card={card}
           slot={editingSlot}
           text={slotText(state.draft, editingSlot)}

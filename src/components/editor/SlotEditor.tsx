@@ -35,6 +35,8 @@ interface Props {
   font: FontId;
   onChange(text: string): void;
   onDone(): void;
+  /** A field left on screen for a moment after writing ends: not focusable or clickable. */
+  inert?: boolean;
 }
 
 /**
@@ -56,21 +58,26 @@ function quadTransform([p0, p1, p2, p3]: Pt[], w: number, h: number): string {
 }
 
 /** Follow the slot's corners on screen while the card settles or the view zooms. */
+function measureQuad(card: RefObject<CardHandle | null>, slot: TextSlot): (Quad & { key: string }) | null {
+  const pts = card.current?.projectFace(SLOT_FACE, SLOTS[slot].box);
+  if (!pts) return null;
+  const w = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+  const h = Math.hypot(pts[3].x - pts[0].x, pts[3].y - pts[0].y);
+  return { w, h, transform: quadTransform(pts, w, h), key: pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ") };
+}
+
 function useSlotQuad(card: RefObject<CardHandle | null>, slot: TextSlot): Quad | null {
-  const [quad, setQuad] = useState<Quad | null>(null);
+  // Measured during the first render, so the field is there in the same frame
+  // the card stops drawing the slot: no blank frame in between.
+  const [quad, setQuad] = useState(() => measureQuad(card, slot));
   useEffect(() => {
     let frame = 0;
-    let last = "";
+    let last = quad?.key ?? "";
     const tick = () => {
-      const pts = card.current?.projectFace(SLOT_FACE, SLOTS[slot].box);
-      if (pts) {
-        const key = pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
-        if (key !== last) {
-          last = key;
-          const w = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
-          const h = Math.hypot(pts[3].x - pts[0].x, pts[3].y - pts[0].y);
-          setQuad({ w, h, transform: quadTransform(pts, w, h) });
-        }
+      const next = measureQuad(card, slot);
+      if (next && next.key !== last) {
+        last = next.key;
+        setQuad(next);
       }
       frame = requestAnimationFrame(tick);
     };
@@ -98,7 +105,7 @@ function useMeasure(font: FontId): (text: string, px: number) => number {
  * draws, so nothing moves when the field takes over. "Dear " and "— " are
  * printed and cannot be edited. The card hides that slot's drawn text meanwhile.
  */
-export function SlotEditor({ card, slot, text, font, onChange, onDone }: Props) {
+export function SlotEditor({ card, slot, text, font, onChange, onDone, inert = false }: Props) {
   const field = useRef<HTMLTextAreaElement & HTMLInputElement>(null);
   const quad = useSlotQuad(card, slot);
   const measure = useMeasure(font);
@@ -112,7 +119,7 @@ export function SlotEditor({ card, slot, text, font, onChange, onDone }: Props) 
 
   useLayoutEffect(() => {
     const el = field.current;
-    if (!el || !quad || document.activeElement === el) return;
+    if (inert || !el || !quad || document.activeElement === el) return;
     el.focus({ preventScroll: true });
     el.setSelectionRange(el.value.length, el.value.length);
   }, [quad, slot]);
@@ -136,6 +143,7 @@ export function SlotEditor({ card, slot, text, font, onChange, onDone }: Props) 
     height: quad.h,
     transform: quad.transform,
     transformOrigin: "0 0",
+    pointerEvents: inert ? "none" : undefined,
     "--hint": FIELD_HINT,
   };
   const common = {
@@ -144,6 +152,8 @@ export function SlotEditor({ card, slot, text, font, onChange, onDone }: Props) 
     spellCheck: false,
     placeholder,
     "aria-label": placeholder,
+    tabIndex: inert ? -1 : undefined,
+    readOnly: inert,
     onBlur: onDone,
     className: "m-0 border-0 bg-transparent p-0 outline-none placeholder:[color:var(--hint)]",
   };
@@ -159,6 +169,7 @@ export function SlotEditor({ card, slot, text, font, onChange, onDone }: Props) 
       <textarea
         ref={field}
         data-slot-editor
+        aria-hidden={inert || undefined}
         {...common}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={keyDown}
@@ -171,6 +182,7 @@ export function SlotEditor({ card, slot, text, font, onChange, onDone }: Props) 
   return (
     <div
       data-slot-editor
+      aria-hidden={inert || undefined}
       // A click on "Dear " or beside the name still writes the name.
       onMouseDown={(e) => {
         if (e.target !== field.current) {

@@ -13,8 +13,12 @@ export const STICKER_WIDTH_FRACTION = 0.3;
 /** Columns of the element quad: enough to follow the panel's bow smoothly. */
 const SEGMENTS = 8;
 
-/** `hint`: an editor-only grey placeholder for an empty slot, never sent. */
-export type LayerElement = CardElement & { uid?: string; hint?: boolean };
+/**
+ * `hint`: an editor-only grey placeholder for an empty slot, never sent.
+ * `hidden`: kept loaded but not drawn (the slot being typed into), so it
+ * shows again the instant writing ends instead of being rebuilt.
+ */
+export type LayerElement = CardElement & { uid?: string; hint?: boolean; hidden?: boolean };
 
 /** A slot's text sits where its slot is, whatever placement it carries. */
 function placed(e: LayerElement): LayerElement {
@@ -38,6 +42,7 @@ interface Entry {
   widthFraction: number;
   element: LayerElement;
   version: number;
+  hidden: boolean;
 }
 
 export interface ElementLayer {
@@ -197,6 +202,7 @@ export function createElementLayer(mounts: Record<Face, FaceMount>, anisotropy: 
       entry.mesh = new THREE.Mesh(new THREE.BufferGeometry(), built.material);
       entry.mesh.userData.uid = entry.key;
       entry.mesh.renderOrder = 2 + entry.element.z;
+      entry.mesh.visible = !entry.hidden;
       place(entry);
     } catch (error) {
       console.error("[card] element failed to load", error);
@@ -223,6 +229,7 @@ export function createElementLayer(mounts: Record<Face, FaceMount>, anisotropy: 
             widthFraction: STICKER_WIDTH_FRACTION,
             element,
             version: 0,
+            hidden: false,
           };
           entry.contentSig = cSig;
           entry.placementSig = pSig;
@@ -234,6 +241,11 @@ export function createElementLayer(mounts: Record<Face, FaceMount>, anisotropy: 
           existing.element = element;
           if (existing.mesh) existing.mesh.renderOrder = 2 + element.z;
           place(existing);
+        }
+        const current = entries.get(key);
+        if (current) {
+          current.hidden = Boolean(element.hidden);
+          if (current.mesh) current.mesh.visible = !current.hidden;
         }
       });
       for (const [key, entry] of entries) {
