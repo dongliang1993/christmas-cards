@@ -86,6 +86,8 @@ export function LetterViewer({ id }: { id: string }) {
             paper={content?.paper}
             deliverLabel={stage === "transit" ? deliverLabelFor(letter.deliverAt) : null}
             onOpened={onOpened}
+            // The recipient meets the envelope first: it, not the card, lifts the loading veil.
+            onFirstFrame={hideChristmasLoading}
           />
         </div>
       )}
@@ -133,6 +135,8 @@ export function LetterViewer({ id }: { id: string }) {
 }
 
 function Notice({ title, body }: { title: string; body: string }) {
+  // No 3D scene here to lift the loading veil, so the notice does it.
+  useEffect(() => hideChristmasLoading(), []);
   return (
     <main className="flex h-dvh items-center justify-center bg-[#fbfaf9] px-6 text-center">
       <div>
