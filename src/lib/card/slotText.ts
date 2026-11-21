@@ -4,7 +4,7 @@ import { SLOTS } from "./slots";
 /** A slot's type never shrinks below this share of its starting size (spec §6.1). */
 export const SLOT_MIN_SCALE = 0.6;
 const SCALE_STEP = 0.05;
-export const SLOT_LINE_HEIGHT = 1.35;
+export const SLOT_LINE_HEIGHT = 1.45;
 
 /** Starting font size of each slot, as a fraction of the face's height. */
 export const SLOT_FONT_FRACTION: Record<TextSlot, number> = {

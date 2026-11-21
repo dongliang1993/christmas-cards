@@ -78,6 +78,19 @@ export async function renderTextImage(text: string, font: FontId, ink: Ink): Pro
 /** One line of text is this fraction of its face's height at scale 1. */
 export const TEXT_LINE_FRACTION = 0.052;
 
+/**
+ * The slots' handwriting: system hands named in full, so the card's canvas and
+ * the field typed into on top of it pick the very same face (no jump on focus).
+ */
+const SLOT_HAND = '"Bradley Hand", Noteworthy, "Hannotate SC", "HanziPen SC", "Kaiti SC", "Segoe Print", "Comic Sans MS", cursive';
+const SLOT_SERIF = 'Georgia, "Songti SC", "STSong", serif';
+
+export function slotFontFamily(font: FontId): string {
+  if (font === "hand-en") return SLOT_HAND;
+  if (font === "serif") return SLOT_SERIF;
+  return `${fontFamily("hand-zh")}, ${SLOT_HAND}`;
+}
+
 /** Grey of the editor-only hints in empty slots. */
 export const HINT_COLOR = "rgba(120, 113, 108, 0.55)";
 
@@ -99,7 +112,7 @@ export async function renderSlotImage(
   const core = hint ? placeholder : slotCore(slot, text);
   const coreColor = hint ? HINT_COLOR : color;
   text = prefix + core + suffix;
-  const family = fontFamily(font);
+  const family = slotFontFamily(font);
   const spec = (px: number) => `500 ${px}px ${family}`;
   try {
     await document.fonts.load(spec(FONT_PX), text);

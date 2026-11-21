@@ -28,9 +28,9 @@ export interface SlotSpec {
 
 /** Where each slot sits (spec §6.1); starting values, tuned by eye. */
 export const SLOTS: Record<TextSlot, SlotSpec> = {
-  greeting: { box: { x0: 0.1, y0: 0.07, x1: 0.9, y1: 0.17 }, align: "left", multiline: false, prefix: "Dear ", suffix: ",", placeholder: "收件人" },
-  body: { box: { x0: 0.1, y0: 0.24, x1: 0.9, y1: 0.78 }, align: "left", multiline: true, prefix: "", suffix: "", placeholder: "写下你想说的话…" },
-  signature: { box: { x0: 0.3, y0: 0.83, x1: 0.9, y1: 0.93 }, align: "right", multiline: false, prefix: "— ", suffix: "", placeholder: "你的名字" },
+  greeting: { box: { x0: 0.1, y0: 0.07, x1: 0.9, y1: 0.17 }, align: "left", multiline: false, prefix: "Dear ", suffix: ",", placeholder: "name" },
+  body: { box: { x0: 0.1, y0: 0.24, x1: 0.9, y1: 0.78 }, align: "left", multiline: true, prefix: "", suffix: "", placeholder: "Your letter" },
+  signature: { box: { x0: 0.3, y0: 0.83, x1: 0.9, y1: 0.93 }, align: "right", multiline: false, prefix: "— ", suffix: "", placeholder: "your name" },
 };
 
 /**
