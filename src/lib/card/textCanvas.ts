@@ -1,5 +1,7 @@
-import type { FontId, Ink } from "@/lib/letter/model";
+import type { FontId, Ink, TextSlot } from "@/lib/letter/model";
 import { splitTextLines } from "./elementLayout";
+import { SLOTS } from "./slots";
+import { layoutSlotText, SLOT_FONT_FRACTION, SLOT_LINE_HEIGHT } from "./slotText";
 
 /** Rendering resolution: px per line of text. */
 const FONT_PX = 96;
@@ -75,3 +77,49 @@ export async function renderTextImage(text: string, font: FontId, ink: Ink): Pro
 
 /** One line of text is this fraction of its face's height at scale 1. */
 export const TEXT_LINE_FRACTION = 0.052;
+
+/** Grey of the editor-only hints in empty slots. */
+export const HINT_COLOR = "rgba(120, 113, 108, 0.55)";
+
+/**
+ * Draw a slot's text into a canvas the exact shape of its box (spec §6.1):
+ * wrapped, shrunk to fit and aligned like the slot, top-aligned for the body
+ * and vertically centred for the one-line slots.
+ */
+export async function renderSlotImage(
+  text: string,
+  slot: TextSlot,
+  font: FontId,
+  color: string,
+  faceAspect: number,
+): Promise<{ canvas: HTMLCanvasElement; aspect: number }> {
+  const family = fontFamily(font);
+  const spec = (px: number) => `500 ${px}px ${family}`;
+  try {
+    await document.fonts.load(spec(FONT_PX), text);
+  } catch {
+    /* draw with whatever face is available */
+  }
+  const measureCtx = document.createElement("canvas").getContext("2d");
+  if (!measureCtx) throw new Error("2D canvas unavailable: cannot draw text");
+  measureCtx.font = spec(FONT_PX);
+  const layout = layoutSlotText(text, slot, { measure: (l) => measureCtx.measureText(l).width / FONT_PX, faceAspect });
+
+  const { box, align, multiline } = SLOTS[slot];
+  const pxPerUnit = FONT_PX / SLOT_FONT_FRACTION[slot];
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil((box.x1 - box.x0) * faceAspect * pxPerUnit);
+  canvas.height = Math.ceil((box.y1 - box.y0) * pxPerUnit);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("2D canvas unavailable: cannot draw text");
+  const px = FONT_PX * layout.fontScale;
+  const lineH = px * SLOT_LINE_HEIGHT;
+  ctx.font = spec(px);
+  ctx.fillStyle = color;
+  ctx.textAlign = align;
+  ctx.textBaseline = "middle";
+  const x = align === "left" ? 0 : canvas.width;
+  const top = multiline ? 0 : (canvas.height - layout.lines.length * lineH) / 2;
+  layout.lines.forEach((line, i) => ctx.fillText(line, x, top + (i + 0.5) * lineH));
+  return { canvas, aspect: canvas.width / canvas.height };
+}

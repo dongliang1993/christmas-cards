@@ -5,14 +5,21 @@ import type { CardElement, Face } from "@/lib/letter/model";
 import { MATERIAL_PRESETS } from "@/lib/reliefCore";
 import { loadStickerManifest, loadStickerSurface } from "@/lib/stickers/stickerSurface";
 import { FACE_FRAMES, quadCorners } from "./elementLayout";
-import { renderTextImage, TEXT_LINE_FRACTION } from "./textCanvas";
+import { slotPlacement, SLOTS } from "./slots";
+import { HINT_COLOR, INK_COLORS, renderSlotImage, renderTextImage, TEXT_LINE_FRACTION } from "./textCanvas";
 
 /** A sticker at scale 1 is this fraction of its face's width. */
 export const STICKER_WIDTH_FRACTION = 0.3;
 /** Columns of the element quad: enough to follow the panel's bow smoothly. */
 const SEGMENTS = 8;
 
-export type LayerElement = CardElement & { uid?: string };
+/** `hint`: an editor-only grey placeholder for an empty slot, never sent. */
+export type LayerElement = CardElement & { uid?: string; hint?: boolean };
+
+/** A slot's text sits where its slot is, whatever placement it carries. */
+function placed(e: LayerElement): LayerElement {
+  return e.kind === "text" && e.slot ? { ...e, ...slotPlacement(e.slot) } : e;
+}
 
 export interface FaceMount {
   /** Panel mesh the face belongs to; element meshes become its children. */
@@ -42,7 +49,7 @@ export interface ElementLayer {
 }
 
 function contentSig(e: LayerElement): string {
-  return e.kind === "sticker" ? `s:${e.stickerId}` : `t:${e.font}:${e.ink}:${e.text}`;
+  return e.kind === "sticker" ? `s:${e.stickerId}` : `t:${e.slot ?? ""}:${e.hint ? "h" : ""}:${e.font}:${e.ink}:${e.text}`;
 }
 
 function placementSig(e: LayerElement): string {
@@ -122,6 +129,19 @@ async function buildMaterial(e: LayerElement, anisotropy: number): Promise<{ mat
       : new THREE.MeshStandardMaterial(params);
     return { material, aspect: sticker.aspect, widthFraction: STICKER_WIDTH_FRACTION };
   }
+  if (e.slot) {
+    const frame = FACE_FRAMES[e.face];
+    const color = e.hint ? HINT_COLOR : INK_COLORS[e.ink];
+    const img = await renderSlotImage(e.text, e.slot, e.font, color, frame.width / frame.height);
+    const material = new THREE.MeshStandardMaterial({
+      ...SHARED_MATERIAL,
+      map: canvasTexture(img.canvas, true, anisotropy),
+      roughness: 0.78,
+      metalness: 0,
+    });
+    const box = SLOTS[e.slot].box;
+    return { material, aspect: img.aspect, widthFraction: box.x1 - box.x0 };
+  }
   const text = await renderTextImage(e.text, e.font, e.ink);
   const gold = e.ink === "gold";
   const material = new THREE.MeshStandardMaterial({
@@ -187,7 +207,7 @@ export function createElementLayer(mounts: Record<Face, FaceMount>, anisotropy: 
   return {
     sync(elements) {
       const seen = new Set<string>();
-      elements.forEach((element, index) => {
+      elements.map(placed).forEach((element, index) => {
         const key = element.uid ?? `i${index}`;
         seen.add(key);
         const existing = entries.get(key);
