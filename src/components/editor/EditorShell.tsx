@@ -6,7 +6,7 @@ import { BookOpen, ChevronLeft, ChevronRight, Eye, EyeOff, LayoutTemplate, Music
 import type { CardHandle } from "@/components/ChristmasCard3D";
 import type { EditorAction, EditorState } from "@/lib/editor/editorState";
 import { PAGES, pageLabel, stepZoom, ZOOM_MAX, ZOOM_MIN, type PageId } from "@/lib/editor/pages";
-import type { FontId, Ink } from "@/lib/letter/model";
+import type { TextSlot } from "@/lib/letter/model";
 import { playSwipe } from "@/lib/sfx";
 import type { CardTemplateId } from "@/lib/types";
 import { CardEditor } from "./CardEditor";
@@ -52,7 +52,12 @@ export function EditorShell({ state, dispatch, initialTool = "stickers" }: Props
   const [page, setPage] = useState<PageId>(initialTool === "style" ? "cover" : "inside");
   const [zoom, setZoom] = useState(1);
   const [preview, setPreview] = useState(false);
-  const [freshText, setFreshText] = useState<string | null>(null);
+  const [editingSlot, setEditingSlot] = useState<TextSlot | null>(null);
+  const editSlot = (slot: TextSlot | null) => {
+    setEditingSlot(slot);
+    // Writing brings up the text tool, so its font buttons are at hand.
+    if (slot) setTool("text");
+  };
   // Phones: the panel is a bottom sheet that opens on a tool tap or a selection.
   const [sheet, setSheet] = useState(false);
   const sheetOpen = sheet || Boolean(state.selected);
@@ -86,12 +91,6 @@ export function EditorShell({ state, dispatch, initialTool = "stickers" }: Props
     const at = drop ? card.current?.pick(drop.clientX, drop.clientY) : null;
     if (drop && !at) return; // dropped off the pages
     dispatch({ type: "add-sticker", stickerId: id, face: at?.face ?? state.focusFace, uid: nanoid(8), at: at ? { x: at.x, y: at.y } : undefined });
-  };
-  const addText = (p: { text: string; font: FontId; ink: Ink }) => {
-    goPage("inside");
-    const uid = nanoid(8);
-    dispatch({ type: "add-text", face: state.focusFace, uid, x: 0.5, y: 0.5, ...p });
-    setFreshText(uid);
   };
   const changeTemplate = (id: CardTemplateId) => {
     if (id !== state.draft.templateId) playSwipe("switch");
@@ -131,7 +130,7 @@ export function EditorShell({ state, dispatch, initialTool = "stickers" }: Props
 
         <div className="relative order-1 flex min-h-0 min-w-0 flex-1 flex-col lg:order-none">
           <div className="relative min-h-0 flex-1">
-            <CardEditor state={state} dispatch={dispatch} paper={state.draft.paper} page={page} zoom={zoom} preview={preview} locked={tool === "style"} onPage={goPage} card={card} />
+            <CardEditor state={state} dispatch={dispatch} paper={state.draft.paper} page={page} zoom={zoom} preview={preview} locked={tool === "style"} onPage={goPage} card={card} editingSlot={editingSlot} onEditSlot={editSlot} />
           </div>
           <div className="flex shrink-0 items-center justify-center gap-3 pb-2 text-xs text-stone-500">
             <IconButton label="上一页" disabled={pageIndex === 0} onClick={() => goPage(PAGES[pageIndex - 1])}>
@@ -159,9 +158,8 @@ export function EditorShell({ state, dispatch, initialTool = "stickers" }: Props
               tool={tool}
               state={state}
               dispatch={dispatch}
-              freshText={freshText}
+              editingSlot={editingSlot}
               onAddSticker={addSticker}
-              onAddText={addText}
               onTemplate={changeTemplate}
             />
           </aside>

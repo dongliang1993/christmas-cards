@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SLOT_FACE, SLOTS, TEXT_SLOTS, slotPlacement } from "./slots";
+import { SLOT_FACE, SLOTS, TEXT_SLOTS, slotAt, slotPlacement } from "./slots";
 
 describe("text slots", () => {
   it("are greeting, body and signature, in reading order", () => {
@@ -25,5 +25,18 @@ describe("text slots", () => {
     expect(SLOTS.greeting.align).toBe("left");
     expect(SLOTS.body.align).toBe("left");
     expect(SLOTS.signature.align).toBe("right");
+  });
+});
+
+describe("slotAt", () => {
+  it("finds the slot whose box holds the point on the right page", () => {
+    const b = SLOTS.body.box;
+    expect(slotAt("inside-right", (b.x0 + b.x1) / 2, b.y1 - 0.01)).toBe("body");
+    expect(slotAt("inside-right", SLOTS.signature.box.x1 - 0.01, SLOTS.signature.box.y0 + 0.01)).toBe("signature");
+  });
+
+  it("finds nothing on the left page or between the boxes", () => {
+    expect(slotAt("inside-left", 0.5, 0.5)).toBeNull();
+    expect(slotAt("inside-right", 0.02, 0.5)).toBeNull();
   });
 });

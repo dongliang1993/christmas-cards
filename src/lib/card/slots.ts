@@ -34,3 +34,16 @@ export function slotPlacement(slot: TextSlot): Omit<Placement, "z"> {
   const { box } = SLOTS[slot];
   return { face: SLOT_FACE, x: (box.x0 + box.x1) / 2, y: (box.y0 + box.y1) / 2, scale: 1, rotation: 0 };
 }
+
+/** Tap target around each box, so a short greeting is still easy to hit. */
+const HIT_PAD = 0.02;
+
+/** The slot under a point on a face (0..1), or null. */
+export function slotAt(face: Face, x: number, y: number): TextSlot | null {
+  if (face !== SLOT_FACE) return null;
+  for (const slot of TEXT_SLOTS) {
+    const { box } = SLOTS[slot];
+    if (x >= box.x0 - HIT_PAD && x <= box.x1 + HIT_PAD && y >= box.y0 - HIT_PAD && y <= box.y1 + HIT_PAD) return slot;
+  }
+  return null;
+}

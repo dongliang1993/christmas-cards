@@ -2,11 +2,13 @@
 
 import { useEffect, useRef, useState, type Dispatch, type RefObject } from "react";
 import { ChristmasCard3D, type CardHandle, type CardPick } from "@/components/ChristmasCard3D";
-import type { EditorAction, EditorElement, EditorState } from "@/lib/editor/editorState";
+import { displayElements, slotFont, slotText, toLetterDraft, type EditorAction, type EditorElement, type EditorState } from "@/lib/editor/editorState";
+import { slotAt } from "@/lib/card/slots";
 import { pinchTransform, type Point } from "@/lib/editor/gestures";
 import type { PageId } from "@/lib/editor/pages";
-import type { Face, PaperStock } from "@/lib/letter/model";
+import type { Face, PaperStock, TextSlot } from "@/lib/letter/model";
 import { SelectionOverlay } from "./SelectionOverlay";
+import { SlotEditor } from "./SlotEditor";
 
 interface Props {
   state: EditorState;
@@ -20,6 +22,21 @@ interface Props {
   locked?: boolean;
   onPage(page: PageId): void;
   card: RefObject<CardHandle | null>;
+  /** The text slot being written in, if any (spec §6.2). */
+  editingSlot?: TextSlot | null;
+  onEditSlot?(slot: TextSlot | null): void;
+}
+
+/** The slot a tap lands on: its drawn text, its grey hint, or its empty box. */
+function slotOfPick(elements: EditorElement[], pick: CardPick): TextSlot | null {
+  if (pick.uid) {
+    const el = elements.find((e) => e.uid === pick.uid);
+    if (el?.kind === "sticker") return null;
+    if (el?.kind === "text" && el.slot) return el.slot;
+    const hint = /^hint-(greeting|body|signature)$/.exec(pick.uid);
+    if (hint) return hint[1] as TextSlot;
+  }
+  return slotAt(pick.face, pick.x, pick.y);
 }
 
 /**
@@ -76,7 +93,7 @@ function FocusOutline({ card, face }: { card: RefObject<CardHandle | null>; face
  * The card is the canvas (spec §4.3, §13): pick, drag, pinch and handles act
  * on the 3D pages directly. Tapping an element on either page edits it.
  */
-export function CardEditor({ state, dispatch, paper, page, zoom, preview, locked = false, onPage, card }: Props) {
+export function CardEditor({ state, dispatch, paper, page, zoom, preview, locked = false, onPage, card, editingSlot = null, onEditSlot }: Props) {
   const pointers = useRef(new Map<number, Point>());
   const gesture = useRef<Gesture | null>(null);
   const editing = page === "inside" && !preview;
@@ -86,6 +103,7 @@ export function CardEditor({ state, dispatch, paper, page, zoom, preview, locked
     dispatch({ type: "transform", uid, patch, record });
 
   const onPointerDown = (e: React.PointerEvent) => {
+    if ((e.target as HTMLElement).closest("[data-slot-editor]")) return;
     if (!editing) {
       // On the cover a tap opens the card to the inside pages — unless the
       // style picker is up, where the cover must stay closed.
@@ -113,6 +131,14 @@ export function CardEditor({ state, dispatch, paper, page, zoom, preview, locked
     if (pointers.current.size > 1) return;
 
     const pick = card.current?.pick(e.clientX, e.clientY) ?? null;
+    const slot = pick && onEditSlot ? slotOfPick(state.draft.elements, pick) : null;
+    if (slot) {
+      dispatch({ type: "select", uid: null });
+      onEditSlot?.(slot);
+      gesture.current = null;
+      return;
+    }
+    if (editingSlot) onEditSlot?.(null);
     if (pick?.uid) {
       const el = byUid(pick.uid);
       dispatch({ type: "select", uid: pick.uid });
@@ -158,7 +184,9 @@ export function CardEditor({ state, dispatch, paper, page, zoom, preview, locked
     <div
       className="relative h-full w-full touch-none select-none"
       // Keep focus where it is (e.g. a text field in the side panel).
-      onMouseDown={(e) => e.preventDefault()}
+      onMouseDown={(e) => {
+        if (!(e.target as HTMLElement).closest("[data-slot-editor]")) e.preventDefault();
+      }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -171,13 +199,25 @@ export function CardEditor({ state, dispatch, paper, page, zoom, preview, locked
         signature=""
         isOpen={page === "inside"}
         isPaused={false}
-        elements={state.draft.elements}
+        elements={(preview ? toLetterDraft(state.draft).elements : displayElements(state.draft)).filter(
+          (el) => !(editing && el.kind === "text" && el.slot && el.slot === editingSlot),
+        )}
         paper={paper}
         zoom={zoom * editorFit()}
         interactive={false}
         handleRef={card}
       />
       {editing && <FocusOutline card={card} face={state.focusFace} />}
+      {editing && editingSlot && onEditSlot && (
+        <SlotEditor
+          card={card}
+          slot={editingSlot}
+          text={slotText(state.draft, editingSlot)}
+          font={slotFont(state.draft, editingSlot)}
+          onChange={(text) => dispatch({ type: "set-slot-text", slot: editingSlot, text })}
+          onDone={() => onEditSlot(null)}
+        />
+      )}
       {selected && (
         <SelectionOverlay
           card={card}

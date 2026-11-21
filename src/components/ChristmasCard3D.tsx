@@ -7,6 +7,7 @@ import { CARD_H, CARD_THICKNESS, CARD_W } from "@/lib/cardConstants";
 import { createElementLayer, type ElementLayer, type LayerElement } from "@/lib/card/elementMeshes";
 import { localToPlacement, placementToLocal } from "@/lib/card/elementLayout";
 import { applyPaperStock } from "@/lib/card/paperStocks";
+import type { FaceBox } from "@/lib/card/slots";
 import type { Face, PaperStock } from "@/lib/letter/model";
 import { OPEN_MAX } from "@/lib/cardBend";
 import {
@@ -125,8 +126,8 @@ export interface CardHandle {
   pick(clientX: number, clientY: number): CardPick | null;
   /** An element's corners (tl, tr, br, bl) in px relative to the card's container. */
   project(uid: string): { x: number; y: number }[] | null;
-  /** A whole inside page's corners (tl, tr, br, bl), same frame as `project`. */
-  projectFace(face: Face): { x: number; y: number }[] | null;
+  /** An inside page's corners (tl, tr, br, bl), or of a box on it; same frame as `project`. */
+  projectFace(face: Face, box?: FaceBox): { x: number; y: number }[] | null;
 }
 
 
@@ -356,7 +357,7 @@ export function ChristmasCard3D({
   useImperativeHandle(handleRef, () => ({
     pick: (cx, cy) => pickApiRef.current?.pick(cx, cy) ?? null,
     project: (uid) => pickApiRef.current?.project(uid) ?? null,
-    projectFace: (face) => pickApiRef.current?.projectFace(face) ?? null,
+    projectFace: (face, box) => pickApiRef.current?.projectFace(face, box) ?? null,
   }), []);
   callbacksRef.current = { onToggleOpen, onOpenProgress, onReady, onFirstFrame };
 
@@ -705,14 +706,14 @@ export function ChristmasCard3D({
         }
         return null;
       },
-      projectFace(face) {
+      projectFace(face, box = { x0: 0, y0: 0, x1: 1, y1: 1 }) {
         const panel = face === "inside-left" ? fb.coverMesh : fb.sheetMesh;
         const rect = container.getBoundingClientRect();
         return [
-          [0, 0],
-          [1, 0],
-          [1, 1],
-          [0, 1],
+          [box.x0, box.y0],
+          [box.x1, box.y0],
+          [box.x1, box.y1],
+          [box.x0, box.y1],
         ].map(([u, v]) => {
           const p = placementToLocal(face, u, v);
           const w = panel.localToWorld(new THREE.Vector3(p.x, p.y, p.z)).project(camera);
