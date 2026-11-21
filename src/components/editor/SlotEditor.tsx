@@ -33,10 +33,10 @@ interface Props {
   slot: TextSlot;
   text: string;
   font: FontId;
+  /** The slot being written in: it takes the caret and the pointer. */
+  active: boolean;
   onChange(text: string): void;
   onDone(): void;
-  /** A field left on screen for a moment after writing ends: not focusable or clickable. */
-  inert?: boolean;
 }
 
 /**
@@ -100,12 +100,12 @@ function useMeasure(font: FontId): (text: string, px: number) => number {
 }
 
 /**
- * Writing straight onto the card (spec §6.2): the sender types where the grey
- * placeholder sits, in the same face, size, grey and perspective the card
- * draws, so nothing moves when the field takes over. "Dear " and "— " are
- * printed and cannot be edited. The card hides that slot's drawn text meanwhile.
+ * One text slot on the card while editing (spec §6.2): always drawn by the
+ * page, laid onto the card in its perspective, so taking the caret changes
+ * nothing on screen. The sender types where the grey placeholder sits;
+ * "Dear " and "— " are printed and cannot be edited.
  */
-export function SlotEditor({ card, slot, text, font, onChange, onDone, inert = false }: Props) {
+export function SlotEditor({ card, slot, text, font, active, onChange, onDone }: Props) {
   const field = useRef<HTMLTextAreaElement & HTMLInputElement>(null);
   const quad = useSlotQuad(card, slot);
   const measure = useMeasure(font);
@@ -119,10 +119,10 @@ export function SlotEditor({ card, slot, text, font, onChange, onDone, inert = f
 
   useLayoutEffect(() => {
     const el = field.current;
-    if (inert || !el || !quad || document.activeElement === el) return;
+    if (!active || !el || !quad || document.activeElement === el) return;
     el.focus({ preventScroll: true });
     el.setSelectionRange(el.value.length, el.value.length);
-  }, [quad, slot]);
+  }, [active, quad, slot]);
 
   if (!quad) return null;
   const fontPx = (quad.h / (box.y1 - box.y0)) * SLOT_FONT_FRACTION[slot] * scale;
@@ -143,7 +143,9 @@ export function SlotEditor({ card, slot, text, font, onChange, onDone, inert = f
     height: quad.h,
     transform: quad.transform,
     transformOrigin: "0 0",
-    pointerEvents: inert ? "none" : undefined,
+    // Idle slots let taps through to the card, so a sticker on top of one
+    // still wins; the card's own hit test then opens the slot.
+    pointerEvents: active ? undefined : "none",
     "--hint": FIELD_HINT,
   };
   const common = {
@@ -152,9 +154,8 @@ export function SlotEditor({ card, slot, text, font, onChange, onDone, inert = f
     spellCheck: false,
     placeholder,
     "aria-label": placeholder,
-    tabIndex: inert ? -1 : undefined,
-    readOnly: inert,
-    onBlur: onDone,
+    tabIndex: active ? undefined : -1,
+    onBlur: () => active && onDone(),
     className: "m-0 border-0 bg-transparent p-0 outline-none placeholder:[color:var(--hint)]",
   };
   const keyDown = (e: React.KeyboardEvent) => {
@@ -169,7 +170,7 @@ export function SlotEditor({ card, slot, text, font, onChange, onDone, inert = f
       <textarea
         ref={field}
         data-slot-editor
-        aria-hidden={inert || undefined}
+
         {...common}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={keyDown}
@@ -182,7 +183,7 @@ export function SlotEditor({ card, slot, text, font, onChange, onDone, inert = f
   return (
     <div
       data-slot-editor
-      aria-hidden={inert || undefined}
+
       // A click on "Dear " or beside the name still writes the name.
       onMouseDown={(e) => {
         if (e.target !== field.current) {

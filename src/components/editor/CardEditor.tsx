@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type Dispatch, type RefObject } from "react";
 import { ChristmasCard3D, type CardHandle, type CardPick } from "@/components/ChristmasCard3D";
 import { displayElements, slotFont, slotText, toLetterDraft, type EditorAction, type EditorElement, type EditorState } from "@/lib/editor/editorState";
-import { slotAt } from "@/lib/card/slots";
+import { slotAt, TEXT_SLOTS } from "@/lib/card/slots";
 import { pinchTransform, type Point } from "@/lib/editor/gestures";
 import type { PageId } from "@/lib/editor/pages";
 import type { Face, PaperStock, TextSlot } from "@/lib/letter/model";
@@ -93,32 +93,7 @@ function FocusOutline({ card, face }: { card: RefObject<CardHandle | null>; face
  * The card is the canvas (spec §4.3, §13): pick, drag, pinch and handles act
  * on the 3D pages directly. Tapping an element on either page edits it.
  */
-/**
- * The slot just left keeps its field on screen for two frames, until the card
- * has drawn that slot again: no blank frame between field and drawn text.
- */
-function useLingering(slot: TextSlot | null): TextSlot | null {
-  const [lingering, setLingering] = useState<TextSlot | null>(null);
-  const previous = useRef<TextSlot | null>(slot);
-  useEffect(() => {
-    const left = previous.current;
-    previous.current = slot;
-    if (!left || left === slot) return;
-    setLingering(left);
-    let inner = 0;
-    const outer = requestAnimationFrame(() => {
-      inner = requestAnimationFrame(() => setLingering(null));
-    });
-    return () => {
-      cancelAnimationFrame(outer);
-      cancelAnimationFrame(inner);
-    };
-  }, [slot]);
-  return lingering === slot ? null : lingering;
-}
-
 export function CardEditor({ state, dispatch, paper, page, zoom, preview, locked = false, onPage, card, editingSlot = null, onEditSlot }: Props) {
-  const lingering = useLingering(editingSlot);
   const pointers = useRef(new Map<number, Point>());
   const gesture = useRef<Gesture | null>(null);
   const editing = page === "inside" && !preview;
@@ -224,12 +199,15 @@ export function CardEditor({ state, dispatch, paper, page, zoom, preview, locked
         signature=""
         isOpen={page === "inside"}
         isPaused={false}
+        // While editing, the slots are written by the page itself (SlotEditor) so
+        // clicking into one changes nothing on screen; the card draws them only
+        // in preview and for the recipient.
         elements={
           preview
             ? toLetterDraft(state.draft).elements
-            : displayElements(state.draft).map((el) =>
-                editing && el.kind === "text" && el.slot === editingSlot && editingSlot ? { ...el, hidden: true } : el,
-              )
+            : editing
+              ? state.draft.elements.filter((el) => !(el.kind === "text" && el.slot))
+              : displayElements(state.draft)
         }
         paper={paper}
         zoom={zoom * editorFit()}
@@ -240,29 +218,20 @@ export function CardEditor({ state, dispatch, paper, page, zoom, preview, locked
       />
       {/* Writing on the card: nothing framed, just the page and the caret. */}
       {editing && !editingSlot && <FocusOutline card={card} face={state.focusFace} />}
-      {editing && lingering && (
-        <SlotEditor
-          key={`linger-${lingering}`}
-          card={card}
-          slot={lingering}
-          text={slotText(state.draft, lingering)}
-          font={slotFont(state.draft, lingering)}
-          inert
-          onChange={() => undefined}
-          onDone={() => undefined}
-        />
-      )}
-      {editing && editingSlot && onEditSlot && (
-        <SlotEditor
-          key={editingSlot}
-          card={card}
-          slot={editingSlot}
-          text={slotText(state.draft, editingSlot)}
-          font={slotFont(state.draft, editingSlot)}
-          onChange={(text) => dispatch({ type: "set-slot-text", slot: editingSlot, text })}
-          onDone={() => onEditSlot(null)}
-        />
-      )}
+      {editing &&
+        onEditSlot &&
+        TEXT_SLOTS.map((slot) => (
+          <SlotEditor
+            key={slot}
+            card={card}
+            slot={slot}
+            active={editingSlot === slot}
+            text={slotText(state.draft, slot)}
+            font={slotFont(state.draft, slot)}
+            onChange={(text) => dispatch({ type: "set-slot-text", slot, text })}
+            onDone={() => onEditSlot(null)}
+          />
+        ))}
       {selected && (
         <SelectionOverlay
           card={card}
