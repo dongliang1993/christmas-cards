@@ -312,6 +312,9 @@ export function ChristmasCard3D({
     // The fly-in waits for the card's artwork to be baked and applied, so no
     // bake ever lands mid-flight (it used to: that was the stutter).
     assetsReady: false,
+    // A card without a fly-in stays hidden until its artwork first lands, so it
+    // never shows as a blank grey board; later template switches keep it shown.
+    everReady: false,
     burstTimer: 0,
     // #7 continuous open progress 0..1 (drag-controllable)
     openProgress: isOpen ? 1 : 0,
@@ -385,13 +388,13 @@ export function ChristmasCard3D({
     stateRef.current.isPaused = isPaused;
   }, [isPaused]);
 
-  const flyInMounted = useRef(false);
+  // The initial state already says whether to fly in; only a new key replays it.
+  // (Keyed on the value, not on "first run": React runs mount effects twice in
+  // development, which used to replay the fly-in on cards that had none.)
+  const lastFlyInKey = useRef(flyInKey);
   useEffect(() => {
-    // On mount the initial state already says whether to fly in; later keys always do.
-    if (!flyInMounted.current) {
-      flyInMounted.current = true;
-      if (!flyIn) return;
-    }
+    if (flyInKey === lastFlyInKey.current) return;
+    lastFlyInKey.current = flyInKey;
     stateRef.current.flyProgress = 0;
     stateRef.current.greetIn = -1;
     resetOrbit();
@@ -959,7 +962,9 @@ export function ChristmasCard3D({
     // Browsing frames the closed card back to leave room for the fan; focus brings it in.
     const closedZ = () =>
       stage.closedZ * (rig ? THREE.MathUtils.lerp(HAND_BACKOFF, 1, stateRef.current.focus.x) : 1);
-    camera.position.z = stateRef.current.isOpen ? stage.openZ : closedZ();
+    // Start at the distance the frame loop settles on (the editor's zoom
+    // included), so the card does not grow into place on mount.
+    camera.position.z = zoomedDistance(stateRef.current.isOpen ? stage.openZ : closedZ(), viewRef.current.zoom);
     // The container, not the window: editor panels change its size without a window resize.
     const resizeObserver = new ResizeObserver(() => handleResize());
     resizeObserver.observe(container);
@@ -1202,6 +1207,11 @@ export function ChristmasCard3D({
 
       // The card in front: its own pose (fly-in, float, drag).
       const outer = fb.outer;
+      if (s.assetsReady) s.everReady = true;
+      if (!rig) {
+        outer.visible = s.everReady;
+        fb.shadowPlane.visible = s.everReady;
+      }
       outer.position.set(0, THREE.MathUtils.lerp(2.2, floatY, ease), THREE.MathUtils.lerp(-14, 0, ease));
       outer.scale.setScalar(THREE.MathUtils.lerp(0.24, 1.0, ease));
       outer.rotation.set(

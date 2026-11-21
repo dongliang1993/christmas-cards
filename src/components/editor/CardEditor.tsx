@@ -199,6 +199,8 @@ export function CardEditor({ state, dispatch, paper, page, zoom, preview, locked
         signature=""
         isOpen={page === "inside"}
         isPaused={false}
+        // A working surface: the card is simply there, no fly-in each time the editor opens.
+        flyIn={false}
         // While editing, the slots are written by the page itself (SlotEditor) so
         // clicking into one changes nothing on screen; the card draws them only
         // in preview and for the recipient.

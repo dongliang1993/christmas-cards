@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useReducer, useState } from "react";
-import { ChristmasCard3D } from "@/components/ChristmasCard3D";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { EditorShell } from "@/components/editor/EditorShell";
 import { EnvelopeScene } from "@/components/envelope/EnvelopeScene";
@@ -41,8 +40,6 @@ export function SenderFlow({ initialTemplate }: { initialTemplate: CardTemplateI
   const [sending, setSending] = useState(false);
   /** What the wax was pressed over; editing the card voids it (spec §4 step 8). */
   const [sealedKey, setSealedKey] = useState<string | null>(null);
-  /** The envelope scene has drawn its first frame: the card it replaces can go. */
-  const [envelopeReady, setEnvelopeReady] = useState(false);
   const [sent, setSent] = useState<(SentLetter & { recipientName: string }) | null>(null);
   const [restored, setRestored] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
@@ -73,7 +70,6 @@ export function SenderFlow({ initialTemplate }: { initialTemplate: CardTemplateI
     const parsed = letterDraftSchema.safeParse(toLetterDraft(draft));
     if (!parsed.success) return setError(parsed.error.issues[0]?.message ?? "还有内容没填好");
     setError(null);
-    setEnvelopeReady(false);
     setStep("seal");
   };
 
@@ -191,17 +187,8 @@ export function SenderFlow({ initialTemplate }: { initialTemplate: CardTemplateI
                 paper={draft.paper}
                 startSealed={alreadySealed}
                 onSealed={sealed}
-                onFirstFrame={() => {
-                  setEnvelopeReady(true);
-                  hideChristmasLoading();
-                }}
+                onFirstFrame={hideChristmasLoading}
               />
-            )}
-            {/* The card stays on top until the envelope has drawn its first frame. */}
-            {!envelopeReady && (
-              <div className="absolute inset-0 z-10">
-                <ChristmasCard3D templateId={draft.templateId} message="" signature="" isOpen={false} isPaused={false} elements={draft.elements} paper={draft.paper} />
-              </div>
             )}
           </EnvelopeStage>
         )}
