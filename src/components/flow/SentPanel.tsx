@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Check, Copy, Inbox, Share2 } from "lucide-react";
+import { Toast, useToast } from "@/components/Toast";
 import { track } from "@/lib/analytics/track";
+import { copyText } from "@/lib/client/clipboard";
 
 interface Props {
   letterUrl: string;
@@ -22,15 +24,19 @@ function formatDelivery(iso: string): string {
 /** The letter is on its way: its link, and what to do next (spec §4.7–4.8). */
 export function SentPanel(props: Props) {
   const [copied, setCopied] = useState<"letter" | "outbox" | null>(null);
+  const { toast, show } = useToast();
+  const linkField = useRef<HTMLInputElement | null>(null);
   const copy = async (text: string, which: "letter" | "outbox") => {
-    try {
-      await navigator.clipboard.writeText(text);
+    if (await copyText(text)) {
       if (which === "letter") track("link_copied");
       setCopied(which);
       setTimeout(() => setCopied(null), 1600);
-    } catch {
-      window.prompt("复制这个链接", text);
+      show({ tone: "ok", text: which === "letter" ? "链接已复制，发给 " + props.recipientName + " 吧" : "寄件箱链接已复制" });
+      return;
     }
+    // Copying is blocked here: select the link so a long-press or ⌘C finishes the job.
+    if (which === "letter") linkField.current?.select();
+    show({ tone: "error", text: "没能自动复制，请长按链接手动复制" });
   };
   const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
 
@@ -41,7 +47,7 @@ export function SentPanel(props: Props) {
         <p className="mt-1 text-sm text-stone-500">{formatDelivery(props.deliverAt)}。把下面的链接发给 {props.recipientName}。</p>
       </div>
       <div className="flex items-center gap-2 rounded-xl border border-stone-200 bg-stone-50 p-2">
-        <input readOnly value={props.letterUrl} className="min-w-0 flex-1 bg-transparent px-2 text-xs text-stone-700 outline-none" aria-label="信件链接" />
+        <input ref={linkField} readOnly value={props.letterUrl} className="min-w-0 flex-1 bg-transparent px-2 text-xs text-stone-700 outline-none" aria-label="信件链接" />
         <button type="button" onClick={() => copy(props.letterUrl, "letter")} className="flex shrink-0 items-center gap-1 rounded-lg bg-stone-900 px-3 py-1.5 text-xs font-medium text-white">
           {copied === "letter" ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
           {copied === "letter" ? "已复制" : "复制"}
@@ -82,6 +88,7 @@ export function SentPanel(props: Props) {
           从头写一封
         </button>
       </div>
+      <Toast toast={toast} />
     </div>
   );
 }
