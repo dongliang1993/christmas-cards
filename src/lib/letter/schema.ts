@@ -6,6 +6,7 @@ import {
   SEAL_COLORS,
   STAMP_IDS,
   STICKER_IDS,
+  TEXT_SLOTS,
   type CardElement,
 } from "./model";
 
@@ -43,8 +44,12 @@ const textElement = z.object({
   text: z.string().trim().min(1, "文字不能为空").max(LIMITS.textLength, `每段文字最多 ${LIMITS.textLength} 字`),
   font: z.enum(["hand-en", "hand-zh", "serif"]),
   ink: z.enum(["black", "red", "gold"]),
+  slot: z.enum(TEXT_SLOTS).optional(),
   ...placement,
-});
+}).refine(
+  (t) => t.slot === undefined || t.slot === "body" || t.text.length <= LIMITS.slotLineLength,
+  `称呼和落款最多 ${LIMITS.slotLineLength} 字`,
+);
 
 const elementSchema = z.discriminatedUnion("kind", [stickerElement, textElement]);
 
@@ -77,6 +82,11 @@ const draftShape = {
 };
 
 function checkLimits(d: { elements: CardElement[] }, ctx: z.RefinementCtx): void {
+  for (const slot of TEXT_SLOTS) {
+    if (d.elements.filter((e) => e.kind === "text" && e.slot === slot).length > 1) {
+      ctx.addIssue({ code: "custom", message: "每个文字区只能有一段文字", path: ["elements"] });
+    }
+  }
   for (const face of FACES) {
     if (countOn(d.elements, "sticker", face) > LIMITS.stickersPerFace) {
       ctx.addIssue({ code: "custom", message: `每一面最多 ${LIMITS.stickersPerFace} 张贴纸`, path: ["elements"] });

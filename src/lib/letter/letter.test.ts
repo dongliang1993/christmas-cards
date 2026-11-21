@@ -9,7 +9,7 @@ function sticker(face: CardElement["face"], i: number): CardElement {
   return { kind: "sticker", stickerId: "holly", face, x: 0.5, y: 0.5, scale: 1, rotation: 0, z: i };
 }
 
-function text(face: CardElement["face"], value = "Merry Christmas"): CardElement {
+function text(face: CardElement["face"], value = "Merry Christmas"): Extract<CardElement, { kind: "text" }> {
   return { kind: "text", text: value, font: "hand-en", ink: "black", face, x: 0.5, y: 0.4, scale: 1, rotation: 0, z: 0 };
 }
 
@@ -73,6 +73,29 @@ describe("letterDraftSchema", () => {
 
   it("requires a recipient name", () => {
     expect(letterDraftSchema.safeParse(draft({ recipientName: "  " })).success).toBe(false);
+  });
+
+  it("accepts a text slot", () => {
+    expect(letterDraftSchema.safeParse(draft({ elements: [{ ...text("inside-right"), slot: "body" }] })).success).toBe(true);
+  });
+
+  it("still accepts legacy free text without a slot", () => {
+    expect(letterDraftSchema.safeParse(draft({ elements: [text("inside-left")] })).success).toBe(true);
+  });
+
+  it("rejects an unknown slot", () => {
+    const bad = { ...text("inside-right"), slot: "footer" } as unknown as CardElement;
+    expect(letterDraftSchema.safeParse(draft({ elements: [bad] })).success).toBe(false);
+  });
+
+  it("rejects the same slot twice", () => {
+    const body = { ...text("inside-right"), slot: "body" as const };
+    expect(letterDraftSchema.safeParse(draft({ elements: [body, body] })).success).toBe(false);
+  });
+
+  it("limits the greeting to one short line", () => {
+    const long = { ...text("inside-right", "x".repeat(LIMITS.slotLineLength + 1)), slot: "greeting" as const };
+    expect(letterDraftSchema.safeParse(draft({ elements: [long] })).success).toBe(false);
   });
 
   it("sendLetterSchema requires an ISO deliverAt", () => {

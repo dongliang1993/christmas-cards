@@ -5,6 +5,10 @@ export type Face = "inside-left" | "inside-right";
 export type Ink = "black" | "red" | "gold";
 export type FontId = "hand-en" | "hand-zh" | "serif";
 
+/** The fixed places text goes on the inside-right page (mobile editor spec §6). */
+export const TEXT_SLOTS = ["greeting", "body", "signature"] as const;
+export type TextSlot = (typeof TEXT_SLOTS)[number];
+
 export const PAPER_STOCK_IDS = ["cold-press", "kraft", "pearl"] as const;
 export type PaperStock = (typeof PAPER_STOCK_IDS)[number];
 
@@ -38,6 +42,8 @@ export const LIMITS = {
   stickersPerFace: 20,
   textsPerFace: 5,
   textLength: 200,
+  /** Greeting and signature are one short line each. */
+  slotLineLength: 40,
   recipientLength: 40,
   minScale: 0.2,
   maxScale: 3,
@@ -55,7 +61,7 @@ export interface Placement {
 
 export type CardElement =
   | ({ kind: "sticker"; stickerId: string } & Placement)
-  | ({ kind: "text"; text: string; font: FontId; ink: Ink } & Placement);
+  | ({ kind: "text"; text: string; font: FontId; ink: Ink; slot?: TextSlot } & Placement);
 
 export interface Seal {
   color: SealColor;
