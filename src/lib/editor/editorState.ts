@@ -3,6 +3,7 @@ import { FIXED_SEAL } from "@/lib/envelope/fixedSeal";
 import { SLOTS, slotPlacement, TEXT_SLOTS } from "@/lib/card/slots";
 import { LIMITS, type CardElement, type Face, type FontId, type Ink, type LetterDraft, type Placement, type TextSlot } from "@/lib/letter/model";
 import { TEMPLATE_MAP } from "@/lib/templates";
+import { greetingFor, linksFor, nameFromGreeting, type GreetingLinks } from "./greeting";
 import type { CardTemplateId } from "@/lib/types";
 
 /** Undo history depth (spec §4.3). */
@@ -28,6 +29,8 @@ export interface EditorState {
   future: Snapshot[];
   /** The inside page new stickers and text land on (spec §13.4). */
   focusFace: Face;
+  /** Greeting ↔ recipient auto-fill (mobile editor spec §6.4). */
+  links: GreetingLinks;
 }
 
 type EnvelopeFields = Pick<
@@ -128,7 +131,9 @@ export function createInitialDraft(templateId: CardTemplateId): EditorDraft {
 }
 
 export function createEditorState(draft: EditorDraft): EditorState {
-  return { draft, selected: null, past: [], future: [], focusFace: "inside-right" };
+  const greeting = slotText(draft, "greeting");
+  const links = linksFor(greeting, draft.recipientName, isBlankSlot("greeting", greeting));
+  return { draft, selected: null, past: [], future: [], focusFace: "inside-right", links };
 }
 
 /** The draft as the API and storage see it, without editor ids. */
@@ -184,7 +189,29 @@ function isSlot(elements: EditorElement[], uid: string): boolean {
   return elements.some((e) => e.uid === uid && e.kind === "text" && e.slot !== undefined);
 }
 
+/** The sender typed the greeting: the recipient follows while it is not their own. */
+function afterGreeting(state: EditorState, text: string): EditorState {
+  const links = { ...state.links, greeting: isBlankSlot("greeting", text) };
+  const draft = links.recipient ? { ...state.draft, recipientName: nameFromGreeting(text) } : state.draft;
+  return { ...state, draft, links };
+}
+
+/** The sender typed the recipient: the greeting follows while it is untouched. */
+function afterRecipient(state: EditorState, name: string): EditorState {
+  const links = { ...state.links, recipient: name.trim() === "" };
+  if (!links.greeting) return { ...state, links };
+  const greeting = name.trim() === "" ? GREETING_PREFIX : greetingFor(name);
+  return { ...state, links, draft: { ...state.draft, elements: writeSlot(state.draft, "greeting", { text: greeting }) } };
+}
+
 export function editorReducer(state: EditorState, action: EditorAction): EditorState {
+  const next = reduce(state, action);
+  if (action.type === "set-slot-text" && action.slot === "greeting") return afterGreeting(next, slotText(next.draft, "greeting"));
+  if (action.type === "set" && action.patch.recipientName !== undefined) return afterRecipient(next, action.patch.recipientName);
+  return next;
+}
+
+function reduce(state: EditorState, action: EditorAction): EditorState {
   const elements = state.draft.elements;
   if ((action.type === "transform" || action.type === "duplicate" || action.type === "layer") && isSlot(elements, action.uid)) {
     return state;
