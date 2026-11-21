@@ -524,6 +524,7 @@ export function ChristmasCard3D({
         "inside-right": { parent: lone.sheetMesh, bendWidth: CARD_W },
       },
       maxAnisotropy,
+      (m) => lampGate.install(m),
     );
 
     const liftedMatPool: THREE.MeshStandardMaterial[] = [];

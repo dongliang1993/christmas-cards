@@ -169,7 +169,16 @@ async function buildMaterial(e: LayerElement, anisotropy: number): Promise<{ mat
  * Stickers and text as their own meshes on the inside faces (spec §9):
  * moving one never re-bakes a page, and each follows its panel's bow.
  */
-export function createElementLayer(mounts: Record<Face, FaceMount>, anisotropy: number): ElementLayer {
+export function createElementLayer(
+  mounts: Record<Face, FaceMount>,
+  anisotropy: number,
+  /**
+   * Applied to each sticker's material: the card passes its pointer-lamp gate,
+   * so stickers glint like the cover's motifs instead of taking the lamp's full
+   * light (which, on bright foil, overshot the bloom threshold into a haze).
+   */
+  decorateSticker?: (material: THREE.Material) => void,
+): ElementLayer {
   const entries = new Map<string, Entry>();
   const bends: Record<Face, number> = { "inside-left": 0, "inside-right": 0 };
   let disposed = false;
@@ -197,6 +206,7 @@ export function createElementLayer(mounts: Record<Face, FaceMount>, anisotropy: 
     const version = ++entry.version;
     try {
       const built = await buildMaterial(entry.element, anisotropy);
+      if (built && entry.element.kind === "sticker") decorateSticker?.(built.material);
       if (disposed || version !== entry.version || entries.get(entry.key) !== entry) {
         if (built) disposeMaterial(built.material);
         return;
