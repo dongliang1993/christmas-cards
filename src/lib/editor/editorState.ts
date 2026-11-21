@@ -1,6 +1,7 @@
 import { nanoid } from "nanoid";
 import { FIXED_SEAL } from "@/lib/envelope/fixedSeal";
-import { LIMITS, type CardElement, type Face, type FontId, type Ink, type LetterDraft, type Placement } from "@/lib/letter/model";
+import { SLOTS, slotPlacement, TEXT_SLOTS } from "@/lib/card/slots";
+import { LIMITS, type CardElement, type Face, type FontId, type Ink, type LetterDraft, type Placement, type TextSlot } from "@/lib/letter/model";
 import { TEMPLATE_MAP } from "@/lib/templates";
 import type { CardTemplateId } from "@/lib/types";
 
@@ -39,6 +40,8 @@ export type EditorAction =
   | { type: "add-text"; face: Face; uid: string; x: number; y: number; text: string; font: FontId; ink: Ink }
   | { type: "transform"; uid: string; patch: Partial<Pick<Placement, "x" | "y" | "scale" | "rotation">>; record: boolean }
   | { type: "update-text"; uid: string; patch: Partial<{ text: string; font: FontId; ink: Ink }> }
+  | { type: "set-slot-text"; slot: TextSlot; text: string }
+  | { type: "set-slot-font"; slot: TextSlot; font: FontId }
   | { type: "duplicate"; uid: string; newUid: string }
   | { type: "remove"; uid: string }
   | { type: "select"; uid: string | null }
@@ -50,16 +53,65 @@ export type EditorAction =
   | { type: "focus-face"; face: Face }
   | { type: "load"; draft: EditorDraft };
 
-/** Where the template's own message sits on the inside-right sheet. */
-const MESSAGE_PLACEMENT = { face: "inside-right" as const, x: 0.5, y: 0.36, scale: 1, rotation: 0, z: 0 };
+/** The greeting a card starts with; the name after it is the sender's to write. */
+export const GREETING_PREFIX = "Dear ";
 
 function fontFor(text: string): FontId {
   return /[㐀-鿿]/.test(text) ? "hand-zh" : "hand-en";
 }
 
-function messageElement(templateId: CardTemplateId): EditorElement {
-  const text = TEMPLATE_MAP[templateId].defaultMessage;
-  return { kind: "text", text, font: fontFor(text), ink: "black", uid: nanoid(8), ...MESSAGE_PLACEMENT };
+/** New text is written in the hand that suits the template's language. */
+function defaultFont(templateId: CardTemplateId): FontId {
+  return fontFor(TEMPLATE_MAP[templateId].defaultMessage);
+}
+
+type SlotElement = Extract<EditorElement, { kind: "text" }> & { slot: TextSlot };
+
+function slotElement(elements: EditorElement[], slot: TextSlot): SlotElement | undefined {
+  return elements.find((e): e is SlotElement => e.kind === "text" && e.slot === slot);
+}
+
+function newSlotElement(slot: TextSlot, text: string, font: FontId): SlotElement {
+  return { kind: "text", slot, text, font, ink: "black", uid: nanoid(8), ...slotPlacement(slot), z: 0 };
+}
+
+export function slotText(draft: Pick<EditorDraft, "elements">, slot: TextSlot): string {
+  return slotElement(draft.elements, slot)?.text ?? "";
+}
+
+export function slotFont(draft: Pick<EditorDraft, "elements" | "templateId">, slot: TextSlot): FontId {
+  return slotElement(draft.elements, slot)?.font ?? defaultFont(draft.templateId);
+}
+
+/** A slot with nothing of the sender's in it: empty, or a greeting that is only "Dear". */
+export function isBlankSlot(slot: TextSlot, text: string): boolean {
+  const t = text.trim();
+  return t === "" || (slot === "greeting" && /^dear[\s,，]*$/i.test(t));
+}
+
+const slotLimit = (slot: TextSlot) => (SLOTS[slot].multiline ? LIMITS.textLength : LIMITS.slotLineLength);
+
+/** Set a slot's text or font, creating its element on first use. */
+function writeSlot(draft: EditorDraft, slot: TextSlot, patch: { text?: string; font?: FontId }): EditorElement[] {
+  const existing = slotElement(draft.elements, slot);
+  const text = patch.text === undefined ? undefined : patch.text.slice(0, slotLimit(slot));
+  if (existing) {
+    return draft.elements.map((e) =>
+      e === existing ? { ...existing, ...(text === undefined ? {} : { text }), ...(patch.font ? { font: patch.font } : {}) } : e,
+    );
+  }
+  return [...draft.elements, newSlotElement(slot, text ?? "", patch.font ?? defaultFont(draft.templateId))];
+}
+
+/** The card as the editor draws it: empty slots get a grey hint (never sent). */
+export function displayElements(draft: Pick<EditorDraft, "elements" | "templateId">): (EditorElement & { hint?: boolean })[] {
+  const shown = draft.elements.filter((e) => !(e.kind === "text" && e.slot && isBlankSlot(e.slot, e.text)));
+  const hints = TEXT_SLOTS.filter((slot) => isBlankSlot(slot, slotText(draft, slot))).map((slot) => ({
+    ...newSlotElement(slot, SLOTS[slot].hint, slotFont(draft, slot)),
+    uid: `hint-${slot}`,
+    hint: true,
+  }));
+  return [...shown, ...hints];
 }
 
 export function createInitialDraft(templateId: CardTemplateId): EditorDraft {
@@ -69,7 +121,7 @@ export function createInitialDraft(templateId: CardTemplateId): EditorDraft {
     envelopeColor: "ivory",
     seal: { ...FIXED_SEAL },
     recipientName: "",
-    elements: [messageElement(templateId)],
+    elements: [newSlotElement("greeting", GREETING_PREFIX, defaultFont(templateId))],
     audioUrl: null,
     audioName: null,
   };
@@ -81,7 +133,8 @@ export function createEditorState(draft: EditorDraft): EditorState {
 
 /** The draft as the API and storage see it, without editor ids. */
 export function toLetterDraft(draft: EditorDraft): LetterDraft {
-  return { ...draft, elements: draft.elements.map(({ uid: _uid, ...element }) => element as CardElement) };
+  const kept = draft.elements.filter((e) => !(e.kind === "text" && e.slot && isBlankSlot(e.slot, e.text)));
+  return { ...draft, elements: kept.map(({ uid: _uid, ...element }) => element as CardElement) };
 }
 
 export function withEditorIds(draft: LetterDraft): EditorDraft {
@@ -89,21 +142,14 @@ export function withEditorIds(draft: LetterDraft): EditorDraft {
 }
 
 /**
- * "复制一封" (spec §4.8): same paper, stickers, seal and timing; recipient
- * blank and the inside-right message back to the template's default.
+ * "复制一封" (spec §4.8): same paper, stickers, seal, timing and signature;
+ * the recipient, the greeting's name and the body start over.
  */
 export function duplicateDraft(draft: EditorDraft): EditorDraft {
-  const firstMessage = draft.elements.find((e) => e.kind === "text" && e.face === "inside-right");
-  const reset = TEMPLATE_MAP[draft.templateId].defaultMessage;
-  return {
-    ...draft,
-    recipientName: "",
-    elements: draft.elements.map((e) => ({
-      ...e,
-      uid: nanoid(8),
-      ...(e === firstMessage && e.kind === "text" ? { text: reset, font: fontFor(reset) } : {}),
-    })),
-  };
+  const elements = draft.elements
+    .filter((e) => !(e.kind === "text" && e.slot === "body"))
+    .map((e) => ({ ...e, uid: nanoid(8), ...(e.kind === "text" && e.slot === "greeting" ? { text: GREETING_PREFIX } : {}) }));
+  return { ...draft, recipientName: "", elements };
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -133,9 +179,21 @@ function mapElement(state: EditorState, uid: string, fn: (e: EditorElement) => E
   return state.draft.elements.map((e) => (e.uid === uid ? fn(e) : e));
 }
 
+/** Slots stay where they are: no dragging, copying or restacking. */
+function isSlot(elements: EditorElement[], uid: string): boolean {
+  return elements.some((e) => e.uid === uid && e.kind === "text" && e.slot !== undefined);
+}
+
 export function editorReducer(state: EditorState, action: EditorAction): EditorState {
   const elements = state.draft.elements;
+  if ((action.type === "transform" || action.type === "duplicate" || action.type === "layer") && isSlot(elements, action.uid)) {
+    return state;
+  }
   switch (action.type) {
+    case "set-slot-text":
+      return withElements(state, writeSlot(state.draft, action.slot, { text: action.text }), true);
+    case "set-slot-font":
+      return withElements(state, writeSlot(state.draft, action.slot, { font: action.font }), true);
     case "add-sticker": {
       if (countOn(elements, "sticker", action.face) >= LIMITS.stickersPerFace) return state;
       const added: EditorElement = {

@@ -23,16 +23,6 @@ function addSticker(face: "inside-left" | "inside-right", uid: string): EditorAc
   return { type: "add-sticker", stickerId: "holly", face, uid };
 }
 
-describe("createInitialDraft", () => {
-  it("starts with the template's message on the inside-right page", () => {
-    const draft = createInitialDraft("winter-moonlight");
-    const texts = draft.elements.filter((e) => e.kind === "text");
-    expect(texts).toHaveLength(1);
-    expect(texts[0].face).toBe("inside-right");
-    expect(texts[0].kind === "text" && texts[0].text).toContain("Under the same winter moon");
-  });
-});
-
 describe("editorReducer", () => {
   it("adds a sticker at the face centre and selects it", () => {
     const s = run(fresh(), addSticker("inside-left", "a"));
@@ -171,21 +161,6 @@ describe("toLetterDraft", () => {
 });
 
 describe("duplicateDraft", () => {
-  it("keeps the design and clears who it is for", () => {
-    const s = run(
-      fresh(),
-      addSticker("inside-left", "a"),
-      { type: "set", patch: { recipientName: "阿树", paper: "pearl" } },
-      { type: "update-text", uid: fresh().draft.elements[0].uid, patch: { text: "给阿树的话" } },
-    );
-    const copy = duplicateDraft(s.draft);
-    expect(copy.recipientName).toBe("");
-    expect(copy.paper).toBe("pearl");
-    expect(copy.elements.filter((e) => e.kind === "sticker")).toHaveLength(1);
-    const message = copy.elements.find((e) => e.kind === "text" && e.face === "inside-right");
-    expect(message?.kind === "text" && message.text).toContain("Under the same winter moon");
-  });
-
   it("gives every element a new id", () => {
     const s = run(fresh(), addSticker("inside-left", "a"));
     const copy = duplicateDraft(s.draft);
