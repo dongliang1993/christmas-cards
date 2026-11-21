@@ -3,6 +3,9 @@ import { LIMITS } from "@/lib/letter/model";
 import {
   createEditorState,
   createInitialDraft,
+  GREETING_PREFIX,
+  slotFont,
+  slotText,
   duplicateDraft,
   editorReducer,
   toLetterDraft,
@@ -189,6 +192,30 @@ describe("draft storage", () => {
     saveDraft(storage, draft);
     const loaded = loadDraft(storage);
     expect(loaded && toLetterDraft(loaded)).toEqual(toLetterDraft(draft));
+  });
+
+  it("keeps the Dear greeting across a reload, though it is not sent", () => {
+    const storage = memoryStorage();
+    saveDraft(storage, fresh().draft);
+    expect(loadDraft(storage) && slotText(loadDraft(storage)!, "greeting")).toBe(GREETING_PREFIX);
+  });
+
+  it("turns an old draft's first right-page text into the body and drops other free text", () => {
+    const storage = memoryStorage();
+    const free = (face: "inside-left" | "inside-right", text: string) => ({
+      kind: "text", text, font: "hand-zh", ink: "gold", face, x: 0.5, y: 0.4, scale: 1, rotation: 0, z: 0,
+    });
+    const old = {
+      ...toLetterDraft(fresh().draft),
+      elements: [free("inside-left", "左页的字"), free("inside-right", "旧祝福"), free("inside-right", "第二段")],
+    };
+    storage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ v: 1, draft: old }));
+    const loaded = loadDraft(storage)!;
+    const texts = loaded.elements.filter((e) => e.kind === "text");
+    expect(texts.every((e) => e.kind === "text" && e.slot !== undefined)).toBe(true);
+    expect(slotText(loaded, "body")).toBe("旧祝福");
+    expect(slotFont(loaded, "body")).toBe("hand-zh");
+    expect(texts.find((e) => e.kind === "text" && e.slot === "body")).toMatchObject({ ink: "black" });
   });
 
   it("returns null for corrupt JSON", () => {

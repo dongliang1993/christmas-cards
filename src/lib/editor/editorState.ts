@@ -117,6 +117,24 @@ export function displayElements(draft: Pick<EditorDraft, "elements" | "templateI
   return [...shown, ...hints];
 }
 
+/**
+ * Bring a stored draft onto the slots (spec §7): the first free text on the
+ * right page becomes the body, other free text is dropped (a local draft
+ * only — sent letters are untouched), and the greeting gets its "Dear " back
+ * since a bare greeting is never saved.
+ */
+export function migrateDraftText(draft: EditorDraft): EditorDraft {
+  const firstFree = draft.elements.find((e) => e.kind === "text" && !e.slot && e.face === "inside-right");
+  let elements = draft.elements.filter((e) => e.kind !== "text" || e.slot !== undefined);
+  if (firstFree?.kind === "text" && !slotElement(elements, "body")) {
+    elements = [...elements, { ...newSlotElement("body", firstFree.text.slice(0, LIMITS.textLength), firstFree.font), uid: firstFree.uid }];
+  }
+  if (!slotElement(elements, "greeting")) {
+    elements = [...elements, newSlotElement("greeting", GREETING_PREFIX, defaultFont(draft.templateId))];
+  }
+  return { ...draft, elements };
+}
+
 export function createInitialDraft(templateId: CardTemplateId): EditorDraft {
   return {
     templateId,
