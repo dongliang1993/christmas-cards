@@ -40,6 +40,11 @@ interface Props {
   /** Sender came back to an envelope already sealed: show it shut, no replay. */
   startSealed?: boolean;
   onSealed?(): void;
+  /**
+   * The recipient's tap broke the seal. Called inside that tap, so the page may
+   * start sound here (browsers only allow it in a user gesture).
+   */
+  onBreak?(): void;
   /** The card has left the envelope: show the card itself now. */
   onOpened?(): void;
   /** The first frame with the card's cover on has been drawn. */
@@ -118,11 +123,11 @@ function buildCard(coverSrc: string, paper: PaperStock) {
  * card drops into a paper envelope, the flap bends shut, the sender presses
  * the wax; the recipient breaks it and the card slides back out.
  */
-export function EnvelopeScene({ mode, envelopeColor, seal, coverSrc, paper = "cold-press", deliverLabel = null, startSealed = false, onSealed, onOpened, onFirstFrame }: Props) {
+export function EnvelopeScene({ mode, envelopeColor, seal, coverSrc, paper = "cold-press", deliverLabel = null, startSealed = false, onSealed, onBreak, onOpened, onFirstFrame }: Props) {
   const host = useRef<HTMLDivElement | null>(null);
   const press = useRef<(kind: "down" | "up") => void>(() => {});
-  const callbacks = useRef({ onSealed, onOpened, onFirstFrame });
-  callbacks.current = { onSealed, onOpened, onFirstFrame };
+  const callbacks = useRef({ onSealed, onBreak, onOpened, onFirstFrame });
+  callbacks.current = { onSealed, onBreak, onOpened, onFirstFrame };
   const [ring, setRing] = useState<{ x: number; y: number; r: number; p: number } | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   // Read once: the same envelope stays mounted from 封装 into 寄出, and sealing
@@ -201,6 +206,7 @@ export function EnvelopeScene({ mode, envelopeColor, seal, coverSrc, paper = "co
         sealState = sealPressStep(sealState, { type: kind === "down" ? "press" : "release" }, reduced);
       } else if (mode === "open" && kind === "down" && sealState.stage === "sealed") {
         sealState = sealPressStep(sealState, { type: "break" }, reduced);
+        callbacks.current.onBreak?.();
       } else if (mode === "transit" && kind === "down") {
         wiggle = 1;
       }

@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { DEFAULT_TEMPLATE_ID } from "@/lib/templates";
-import { Pause, Play } from "lucide-react";
+import { Music, VolumeX } from "lucide-react";
 import { ChristmasCard3D } from "@/components/ChristmasCard3D";
 import { EnvelopeScene } from "@/components/envelope/EnvelopeScene";
 import { CARD_ASSETS } from "@/lib/cardAssets";
@@ -11,6 +11,7 @@ import { lettersApi } from "@/lib/client/lettersApi";
 import { hideChristmasLoading } from "@/lib/loadingVeil";
 import type { PublicLetter } from "@/lib/letter/model";
 import { shouldRecordOpening, viewerStage } from "@/lib/letter/viewer";
+import { useLetterMusic } from "./useLetterMusic";
 
 /** Longest wait we arm a timer for; beyond it the page simply asks on reload. */
 const MAX_TIMER_MS = 24 * 3600_000;
@@ -32,8 +33,7 @@ export function LetterViewer({ id }: { id: string }) {
   const [open, setOpen] = useState(false);
   /** The card has drawn itself under the envelope: the envelope can go. */
   const [cardReady, setCardReady] = useState(false);
-  const [playing, setPlaying] = useState(false);
-  const audio = useRef<HTMLAudioElement | null>(null);
+  const music = useLetterMusic(letter?.content?.audioUrl);
 
   const load = useCallback(() => {
     lettersApi
@@ -90,6 +90,8 @@ export function LetterViewer({ id }: { id: string }) {
             coverSrc={CARD_ASSETS[content?.templateId ?? DEFAULT_TEMPLATE_ID].coverSrc}
             paper={content?.paper}
             deliverLabel={stage === "transit" ? deliverLabelFor(letter.deliverAt) : null}
+            // The tap that breaks the seal is the gesture that may start the music.
+            onBreak={music.start}
             onOpened={onOpened}
             // The recipient meets the envelope first: it, not the card, lifts the loading veil.
             onFirstFrame={hideChristmasLoading}
@@ -111,30 +113,25 @@ export function LetterViewer({ id }: { id: string }) {
             onFirstFrame={() => {
               setCardReady(true);
               hideChristmasLoading();
+              // A letter opened on an earlier visit: try now; if the browser
+              // wants a gesture first, the first touch starts it.
+              if (!brokeHere) music.start();
             }}
           />
           {content.audioUrl && (
-            <>
-              <audio ref={audio} src={content.audioUrl} loop onEnded={() => setPlaying(false)} />
-              <button
-                type="button"
-                aria-label={playing ? "暂停音乐" : "播放音乐"}
-                onClick={() => {
-                  const el = audio.current;
-                  if (!el) return;
-                  if (playing) el.pause();
-                  else el.play().catch(() => undefined);
-                  setPlaying(!playing);
-                }}
-                className="absolute bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-white/90 px-4 py-2 text-xs text-stone-700 shadow"
-              >
-                {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                {content.audioName ?? "音乐"}
-              </button>
-            </>
+            <button
+              type="button"
+              aria-label={music.playing ? "关闭音乐" : "播放音乐"}
+              aria-pressed={music.playing}
+              onClick={music.toggle}
+              className="absolute right-4 top-4 z-20 flex h-10 w-10 items-center justify-center rounded-full bg-white/85 text-stone-700 shadow-sm ring-1 ring-stone-200/70 backdrop-blur transition hover:bg-white"
+            >
+              {music.playing ? <Music className="h-[18px] w-[18px]" /> : <VolumeX className="h-[18px] w-[18px] text-stone-400" />}
+            </button>
           )}
         </>
       )}
+      {content?.audioUrl && <audio ref={music.audio} src={content.audioUrl} loop preload="auto" />}
     </main>
   );
 }

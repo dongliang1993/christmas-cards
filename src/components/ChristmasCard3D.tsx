@@ -1248,7 +1248,10 @@ export function ChristmasCard3D({
 
       lampGate.update(hoverLamp, camera);
       postfx.render(dt);
-      if (coverOnRef.current && !firstFrameFired) {
+      // Only once the card itself was in this frame: the cover arrives before the
+      // pages are on, and until then the card is hidden (a page that lifts its
+      // cover — the envelope, the veil — on an empty frame would flash).
+      if (coverOnRef.current && s.everReady && !firstFrameFired) {
         firstFrameFired = true;
         callbacksRef.current.onFirstFrame?.();
       }
