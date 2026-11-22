@@ -1,6 +1,7 @@
 "use client";
 
 import type { DeliveryChoice } from "@/lib/letter/model";
+import { DeliveryDatePicker } from "./DeliveryDatePicker";
 
 const OPTIONS: { kind: DeliveryChoice["kind"]; label: string }[] = [
   { kind: "now", label: "立刻送达" },
@@ -43,14 +44,7 @@ export function SendPanel({ recipientName, delivery, sending, error, onDelivery,
           ))}
         </div>
         {delivery.kind === "date" && (
-          <input
-            type="date"
-            min={today}
-            value={delivery.date}
-            onChange={(e) => onDelivery({ kind: "date", date: e.target.value })}
-            aria-label="送达日期"
-            className="mt-2 rounded-lg border border-stone-200 px-3 py-1.5 text-sm outline-none focus:border-stone-400"
-          />
+          <DeliveryDatePicker value={delivery.date} min={today} onChange={(date) => onDelivery({ kind: "date", date })} />
         )}
         <p className="mt-1.5 text-[11px] text-stone-400">在你所在时区的当天 0 点送达；送达前，朋友只能看到一封在路上的信。</p>
       </fieldset>
