@@ -182,6 +182,7 @@ export function EditorShell({ state, dispatch, initialTool = "stickers", askName
               editingSlot={editingSlot}
               onAddSticker={addSticker}
               onTemplate={changeTemplate}
+              shapeOf={(uid) => card.current?.shapeOf(uid) ?? null}
             />
           </aside>
         )}

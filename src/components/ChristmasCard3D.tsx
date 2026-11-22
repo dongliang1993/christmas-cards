@@ -6,6 +6,7 @@ import { CARD_ASSETS } from "@/lib/cardAssets";
 import { CARD_H, CARD_THICKNESS, CARD_W } from "@/lib/cardConstants";
 import { createElementLayer, type ElementLayer, type LayerElement } from "@/lib/card/elementMeshes";
 import { localToPlacement, placementToLocal } from "@/lib/card/elementLayout";
+import type { ElementShape } from "@/lib/card/elementBounds";
 import { applyPaperStock } from "@/lib/card/paperStocks";
 import type { FaceBox } from "@/lib/card/slots";
 import type { Face, PaperStock } from "@/lib/letter/model";
@@ -128,6 +129,10 @@ export interface CardHandle {
   project(uid: string): { x: number; y: number }[] | null;
   /** An inside page's corners (tl, tr, br, bl), or of a box on it; same frame as `project`. */
   projectFace(face: Face, box?: FaceBox): { x: number; y: number }[] | null;
+  /** An element's size at scale 1, once it has loaded. */
+  shapeOf(uid: string): ElementShape | null;
+  /** Draw this element over the paper while a gesture holds it; null to put it back. */
+  lift(uid: string | null): void;
 }
 
 
@@ -361,6 +366,8 @@ export function ChristmasCard3D({
     pick: (cx, cy) => pickApiRef.current?.pick(cx, cy) ?? null,
     project: (uid) => pickApiRef.current?.project(uid) ?? null,
     projectFace: (face, box) => pickApiRef.current?.projectFace(face, box) ?? null,
+    shapeOf: (uid) => pickApiRef.current?.shapeOf(uid) ?? null,
+    lift: (uid) => pickApiRef.current?.lift(uid),
   }), []);
   callbacksRef.current = { onToggleOpen, onOpenProgress, onReady, onFirstFrame };
 
@@ -688,7 +695,8 @@ export function ChristmasCard3D({
       return pickNdc;
     };
     const faceOf = (panel: THREE.Object3D, normalZ: number): Face | null => {
-      if (panel === fb.sheetMesh && normalZ > 0) return "inside-right";
+      // The right page is the sheet and the panel's margin around it.
+      if ((panel === fb.sheetMesh || panel === fb.rightMesh) && normalZ > 0) return "inside-right";
       if (panel === fb.coverMesh && normalZ < 0) return "inside-left";
       return null;
     };
@@ -696,7 +704,7 @@ export function ChristmasCard3D({
       pick(cx, cy) {
         pickRay.setFromCamera(toNdc(cx, cy), camera);
         const layer = elementLayerRef.current?.meshes() ?? [];
-        const hits = pickRay.intersectObjects([...layer, fb.coverMesh, fb.sheetMesh], false);
+        const hits = pickRay.intersectObjects([...layer, fb.coverMesh, fb.sheetMesh, fb.rightMesh], false);
         for (const hit of hits) {
           const isElement = typeof hit.object.userData.uid === "string";
           const panel = isElement ? hit.object.parent : hit.object;
@@ -704,7 +712,9 @@ export function ChristmasCard3D({
           const normalZ = isElement ? (panel === fb.coverMesh ? -1 : 1) : (hit.face?.normal.z ?? 0);
           const face = faceOf(panel, normalZ);
           if (!face) continue;
-          const local = panel.worldToLocal(hit.point.clone());
+          // Placement on the right page is in the sheet's frame, also past its edges.
+          const frame = face === "inside-right" ? fb.sheetMesh : panel;
+          const local = frame.worldToLocal(hit.point.clone());
           const at = localToPlacement(face, local.x, local.y);
           return { face, x: at.x, y: at.y, uid: isElement ? (hit.object.userData.uid as string) : null };
         }
@@ -723,6 +733,12 @@ export function ChristmasCard3D({
           const w = panel.localToWorld(new THREE.Vector3(p.x, p.y, p.z)).project(camera);
           return { x: ((w.x + 1) / 2) * rect.width, y: ((1 - w.y) / 2) * rect.height };
         });
+      },
+      shapeOf(uid) {
+        return elementLayerRef.current?.shapeOf(uid) ?? null;
+      },
+      lift(uid) {
+        elementLayerRef.current?.lift(uid);
       },
       project(uid) {
         const mesh = elementLayerRef.current?.meshes().find((m) => m.userData.uid === uid);

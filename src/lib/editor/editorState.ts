@@ -1,6 +1,7 @@
 import { nanoid } from "nanoid";
 import { FIXED_SEAL } from "@/lib/envelope/fixedSeal";
 import { slotCore, SLOTS, slotPlacement, TEXT_SLOTS } from "@/lib/card/slots";
+import { PAGE_BOX, settle, type ElementShape } from "@/lib/card/elementBounds";
 import { LIMITS, type CardElement, type Face, type FontId, type Ink, type LetterDraft, type Placement, type TextSlot } from "@/lib/letter/model";
 import { TEMPLATE_MAP } from "@/lib/templates";
 import type { CardTemplateId } from "@/lib/types";
@@ -38,7 +39,7 @@ type EnvelopeFields = Pick<
 export type EditorAction =
   | { type: "add-sticker"; stickerId: string; face: Face; uid: string; at?: { x: number; y: number } }
   | { type: "add-text"; face: Face; uid: string; x: number; y: number; text: string; font: FontId; ink: Ink }
-  | { type: "transform"; uid: string; patch: Partial<Pick<Placement, "x" | "y" | "scale" | "rotation">>; record: boolean }
+  | { type: "transform"; uid: string; patch: Partial<Pick<Placement, "face" | "x" | "y" | "scale" | "rotation">>; record: boolean }
   | { type: "update-text"; uid: string; patch: Partial<{ text: string; font: FontId; ink: Ink }> }
   | { type: "set-slot-text"; slot: TextSlot; text: string }
   | { type: "set-slot-font"; slot: TextSlot; font: FontId }
@@ -51,6 +52,11 @@ export type EditorAction =
   | { type: "redo" }
   | { type: "layer"; uid: string; dir: 1 | -1 }
   | { type: "focus-face"; face: Face }
+  /**
+   * Move `amount` (0..1) of the way to where the whole element sits on its page.
+   * Repeated each frame it glides there; it never adds an undo step.
+   */
+  | { type: "settle"; uid: string; shape: ElementShape | null; amount: number }
   | { type: "load"; draft: EditorDraft };
 
 function fontFor(text: string): FontId {
@@ -253,15 +259,25 @@ function reduce(state: EditorState, action: EditorAction): EditorState {
       return { ...withElements(state, [...elements, added], true), selected: action.uid, focusFace: action.face };
     }
     case "transform": {
-      const { x, y, scale, rotation } = action.patch;
+      const { face, x, y, scale, rotation } = action.patch;
+      const el = elements.find((e) => e.uid === action.uid);
+      const moving = el !== undefined && face !== undefined && face !== el.face;
+      if (moving) {
+        // Across the fold: the other page takes it only if it has room.
+        const cap = el.kind === "sticker" ? LIMITS.stickersPerFace : LIMITS.textsPerFace;
+        if (countOn(elements, el.kind, face) >= cap) return state;
+      }
       const next = mapElement(state, action.uid, (e) => ({
         ...e,
-        ...(x === undefined ? {} : { x: clamp(x, 0, 1) }),
-        ...(y === undefined ? {} : { y: clamp(y, 0, 1) }),
+        ...(moving ? { face, z: topZ(elements, face) } : {}),
+        // The centre stays on its page; the edges are settled on release (elementBounds).
+        ...(x === undefined ? {} : { x: clamp(x, PAGE_BOX[face ?? e.face].x0, PAGE_BOX[face ?? e.face].x1) }),
+        ...(y === undefined ? {} : { y: clamp(y, PAGE_BOX[face ?? e.face].y0, PAGE_BOX[face ?? e.face].y1) }),
         ...(scale === undefined ? {} : { scale: clamp(scale, LIMITS.minScale, LIMITS.maxScale) }),
         ...(rotation === undefined ? {} : { rotation: wrapAngle(rotation) }),
       }));
-      return withElements(state, next, action.record);
+      const moved = withElements(state, next, action.record);
+      return moving ? { ...moved, focusFace: face } : moved;
     }
     case "update-text": {
       const next = mapElement(state, action.uid, (e) =>
@@ -292,6 +308,14 @@ function reduce(state: EditorState, action: EditorAction): EditorState {
     }
     case "focus-face":
       return { ...state, focusFace: action.face };
+    case "settle": {
+      const k = clamp(action.amount, 0, 1);
+      const next = mapElement(state, action.uid, (e) => {
+        const to = settle(e, action.shape, {});
+        return { ...e, x: e.x + (to.x - e.x) * k, y: e.y + (to.y - e.y) * k };
+      });
+      return withElements(state, next, false);
+    }
     case "layer": {
       const el = elements.find((e) => e.uid === action.uid);
       if (!el) return state;

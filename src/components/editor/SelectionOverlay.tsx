@@ -11,6 +11,10 @@ interface Props {
   /** Scale and rotation at the moment a handle drag starts. */
   current: { scale: number; rotation: number };
   onTransform(patch: { scale: number; rotation: number }, record: boolean): void;
+  /** The handle is taken hold of. */
+  onGrab(): void;
+  /** The handle let go; `moved` if it scaled or turned (it may now overhang its page). */
+  onRelease(moved: boolean): void;
   onDelete(): void;
 }
 
@@ -18,7 +22,7 @@ interface Props {
  * Dashed outline, a corner handle (scale + rotate) and a delete button for
  * the selected element, kept on it every frame as the card breathes.
  */
-export function SelectionOverlay({ card, uid, current, onTransform, onDelete }: Props) {
+export function SelectionOverlay({ card, uid, current, onTransform, onGrab, onRelease, onDelete }: Props) {
   const [corners, setCorners] = useState<Point[] | null>(null);
   const drag = useRef<{ centre: Point; from: Point; scale: number; rotation: number; recorded: boolean } | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -64,6 +68,7 @@ export function SelectionOverlay({ card, uid, current, onTransform, onDelete }: 
           e.stopPropagation();
           e.currentTarget.setPointerCapture(e.pointerId);
           drag.current = { centre, from: local(e), ...current, recorded: false };
+          onGrab();
         }}
         onPointerMove={(e) => {
           const d = drag.current;
@@ -73,6 +78,7 @@ export function SelectionOverlay({ card, uid, current, onTransform, onDelete }: 
           d.recorded = true;
         }}
         onPointerUp={() => {
+          if (drag.current) onRelease(drag.current.recorded);
           drag.current = null;
         }}
       />

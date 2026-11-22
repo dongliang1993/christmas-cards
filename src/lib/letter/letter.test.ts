@@ -61,7 +61,7 @@ describe("letterDraftSchema", () => {
   });
 
   it("rejects a placement outside the face", () => {
-    const elements = [{ ...sticker("inside-left", 0), x: 1.2 }];
+    const elements = [{ ...sticker("inside-left", 0), x: 1.5 }];
     expect(letterDraftSchema.safeParse(draft({ elements })).success).toBe(false);
   });
 

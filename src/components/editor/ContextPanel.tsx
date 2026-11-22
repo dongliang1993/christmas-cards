@@ -4,6 +4,7 @@ import { type Dispatch, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, Copy, Trash2 } from "lucide-react";
 import { CARD_ASSETS } from "@/lib/cardAssets";
 import { PAPER_STOCKS } from "@/lib/card/paperStocks";
+import { settle, type ElementShape } from "@/lib/card/elementBounds";
 import { slotFont, type EditorAction, type EditorElement, type EditorState } from "@/lib/editor/editorState";
 import { LIMITS, PAPER_STOCK_IDS, type FontId, type TextSlot } from "@/lib/letter/model";
 import { CARD_TEMPLATES } from "@/lib/templates";
@@ -24,6 +25,8 @@ interface Props {
   editingSlot: TextSlot | null;
   onAddSticker(id: string, at?: { clientX: number; clientY: number }): void;
   onTemplate(id: CardTemplateId): void;
+  /** A loaded element's size at scale 1, so the sliders keep it on its page. */
+  shapeOf(uid: string): ElementShape | null;
 }
 
 /** Ready-made blessings: one tap writes it into the body (spec §6.5). */
@@ -74,10 +77,11 @@ function Section({ title, children, hint }: { title: string; children: ReactNode
   );
 }
 
-function StickerProps({ el, dispatch }: { el: EditorElement; dispatch: Dispatch<EditorAction> }) {
+function StickerProps({ el, dispatch, shapeOf }: { el: EditorElement; dispatch: Dispatch<EditorAction>; shapeOf(uid: string): ElementShape | null }) {
   const deg = Math.round((el.rotation * 180) / Math.PI);
+  // Growing or turning near the fold nudges it back onto its page.
   const set = (patch: { scale?: number; rotation?: number }) =>
-    dispatch({ type: "transform", uid: el.uid, patch, record: true });
+    dispatch({ type: "transform", uid: el.uid, patch: settle(el, shapeOf(el.uid), patch), record: true });
   return (
     <Section title="贴纸" hint="也可以直接在卡片上拖动、拉角上的手柄">
       <div className="space-y-4 px-4 pb-4">
@@ -127,9 +131,9 @@ function StickerProps({ el, dispatch }: { el: EditorElement; dispatch: Dispatch<
 }
 
 /** Right-hand panel: follows what the sender is doing (spec §13.2). */
-export function ContextPanel({ tool, state, dispatch, editingSlot, onAddSticker, onTemplate }: Props) {
+export function ContextPanel({ tool, state, dispatch, editingSlot, onAddSticker, onTemplate, shapeOf }: Props) {
   const selected = state.draft.elements.find((e) => e.uid === state.selected) ?? null;
-  if (selected?.kind === "sticker") return <StickerProps el={selected} dispatch={dispatch} />;
+  if (selected?.kind === "sticker") return <StickerProps el={selected} dispatch={dispatch} shapeOf={shapeOf} />;
 
   const page = state.focusFace === "inside-left" ? "左页" : "右页";
   switch (tool) {

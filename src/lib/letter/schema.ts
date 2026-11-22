@@ -23,11 +23,15 @@ const TEMPLATE_IDS = [
   "snow-town",
 ] as const;
 const FACES = ["inside-left", "inside-right"] as const;
+/** Covers the right page's margin around the sheet (about 0.1 of it each side). */
+const PAGE_MARGIN = 0.2;
 
 const placement = {
   face: z.enum(FACES),
-  x: z.number().min(0).max(1),
-  y: z.number().min(0).max(1),
+  // The right page runs past its letter sheet to the panel's edges (PAGE_BOX), so
+  // a centre there can sit a little outside the sheet's 0..1.
+  x: z.number().min(-PAGE_MARGIN).max(1 + PAGE_MARGIN),
+  y: z.number().min(-PAGE_MARGIN).max(1 + PAGE_MARGIN),
   scale: z.number().min(LIMITS.minScale).max(LIMITS.maxScale),
   rotation: z.number().min(-Math.PI * 2).max(Math.PI * 2),
   z: z.number().int().min(0).max(1000),

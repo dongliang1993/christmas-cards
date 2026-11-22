@@ -66,3 +66,54 @@ describe("pages and zoom", () => {
     expect(stepZoom(1, -1)).toBeCloseTo(0.8);
   });
 });
+
+describe("transform across pages", () => {
+  const at = (s: EditorState, uid: string) => s.draft.elements.find((e) => e.uid === uid);
+
+  it("moves a sticker to the other page, on top there", () => {
+    const s = run(fresh(), add("r", "inside-right"), add("a", "inside-left"), {
+      type: "transform",
+      uid: "a",
+      patch: { face: "inside-right", x: 0.2 },
+      record: true,
+    });
+    expect(at(s, "a")?.face).toBe("inside-right");
+    expect(at(s, "a")?.x).toBe(0.2);
+    expect(at(s, "a")?.z).toBeGreaterThan(at(s, "r")?.z ?? 0);
+    expect(s.focusFace).toBe("inside-right");
+  });
+
+  it("stays put when the other page is full", () => {
+    const full = Array.from({ length: 20 }, (_, i) => add(`r${i}`, "inside-right"));
+    const s = run(fresh(), ...full, add("a", "inside-left"), { type: "transform", uid: "a", patch: { face: "inside-right", x: 0.2 }, record: true });
+    expect(at(s, "a")?.face).toBe("inside-left");
+    expect(at(s, "a")?.x).toBe(0.5);
+  });
+});
+
+describe("transform bounds", () => {
+  it("lets a centre into the right panel's margin but not off the card", () => {
+    const s = run(fresh(), add("a", "inside-right"), { type: "transform", uid: "a", patch: { x: 1.05 }, record: true });
+    expect(s.draft.elements.find((e) => e.uid === "a")?.x).toBe(1.05);
+    const t = run(s, { type: "transform", uid: "a", patch: { x: 3 }, record: true });
+    expect(t.draft.elements.find((e) => e.uid === "a")?.x).toBeLessThan(1.2);
+  });
+});
+
+describe("settle", () => {
+  const shape = { widthFraction: 0.3, aspect: 1 };
+  const xOf = (s: EditorState) => s.draft.elements.find((e) => e.uid === "a")?.x ?? NaN;
+  const overFold = () => run(fresh(), add("a", "inside-left"), { type: "transform", uid: "a", patch: { x: 1 }, record: true });
+
+  it("moves part of the way onto the page, from where it is now", () => {
+    const s = run(overFold(), { type: "settle", uid: "a", shape, amount: 0.5 });
+    expect(xOf(s)).toBeCloseTo(0.925);
+  });
+
+  it("lands fully on the page at amount 1, without an undo step", () => {
+    const before = overFold();
+    const s = run(before, { type: "settle", uid: "a", shape, amount: 1 });
+    expect(xOf(s)).toBeCloseTo(0.85);
+    expect(s.past).toHaveLength(before.past.length);
+  });
+});

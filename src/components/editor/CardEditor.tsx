@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState, type Dispatch, type RefObject } from "react";
+import { useCallback, useRef, type Dispatch, type RefObject } from "react";
 import { ChristmasCard3D, type CardHandle, type CardPick } from "@/components/ChristmasCard3D";
 import { displayElements, slotFont, slotText, toLetterDraft, type EditorAction, type EditorElement, type EditorState } from "@/lib/editor/editorState";
 import { slotAt, TEXT_SLOTS } from "@/lib/card/slots";
 import { pinchTransform, type Point } from "@/lib/editor/gestures";
+import { scaleAcross, shiftAcross } from "@/lib/card/elementBounds";
 import type { PageId } from "@/lib/editor/pages";
 import type { Face, PaperStock, TextSlot } from "@/lib/letter/model";
 import { SelectionOverlay } from "./SelectionOverlay";
 import { SlotEditor } from "./SlotEditor";
+import { useSettleGlide } from "./useSettleGlide";
 
 interface Props {
   state: EditorState;
@@ -51,7 +53,16 @@ function editorFit(): number {
 }
 
 type Gesture =
-  | { kind: "drag"; uid: string; face: Face; start: CardPick; from: { x: number; y: number }; recorded: boolean }
+  | {
+      kind: "drag";
+      uid: string;
+      /** The page it is on now: a drag can carry it across the fold. */
+      face: Face;
+      /** Element centre minus the grab point, in that page's fractions. */
+      grab: Point;
+      scale: number;
+      recorded: boolean;
+    }
   | {
       kind: "pinch";
       uid: string;
@@ -61,33 +72,6 @@ type Gesture =
       from: { x: number; y: number; scale: number; rotation: number };
       recorded: boolean;
     };
-
-/** Outline of the inside page new things land on (spec §13.4). */
-function FocusOutline({ card, face }: { card: RefObject<CardHandle | null>; face: Face }) {
-  const [pts, setPts] = useState<Point[] | null>(null);
-  useEffect(() => {
-    let frame = 0;
-    const tick = () => {
-      setPts(card.current?.projectFace(face) ?? null);
-      frame = requestAnimationFrame(tick);
-    };
-    tick();
-    return () => cancelAnimationFrame(frame);
-  }, [card, face]);
-  if (!pts) return null;
-  return (
-    <svg className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden>
-      <polygon
-        points={pts.map((p) => `${p.x},${p.y}`).join(" ")}
-        fill="none"
-        stroke="#a8a29e"
-        strokeOpacity={0.7}
-        strokeWidth={1}
-        strokeDasharray="5 4"
-      />
-    </svg>
-  );
-}
 
 /**
  * The card is the canvas (spec §4.3, §13): pick, drag, pinch and handles act
@@ -99,8 +83,14 @@ export function CardEditor({ state, dispatch, paper, page, zoom, preview, locked
   const editing = page === "inside" && !preview;
   const selected = editing ? (state.draft.elements.find((e) => e.uid === state.selected) ?? null) : null;
   const byUid = (uid: string): EditorElement | undefined => state.draft.elements.find((e) => e.uid === uid);
-  const move = (uid: string, patch: Partial<Pick<EditorElement, "x" | "y" | "scale" | "rotation">>, record: boolean) =>
+  const move = (uid: string, patch: Partial<Pick<EditorElement, "face" | "x" | "y" | "scale" | "rotation">>, record: boolean) =>
     dispatch({ type: "transform", uid, patch, record });
+  // Gestures move freely, over the fold too, drawn over the paper so the other
+  // page cannot hide them; on release it glides onto its page and is put back.
+  const lift = (uid: string | null) => card.current?.lift(uid);
+  const putDown = useCallback(() => card.current?.lift(null), [card]);
+  const { glide, stop: stopGlide } = useSettleGlide(card, dispatch, putDown);
+  const release = (uid: string, moved: boolean) => (moved ? glide(uid) : putDown());
 
   const onPointerDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest("[data-slot-editor]")) return;
@@ -112,6 +102,8 @@ export function CardEditor({ state, dispatch, paper, page, zoom, preview, locked
     }
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     e.currentTarget.setPointerCapture(e.pointerId);
+    stopGlide();
+    putDown();
 
     if (pointers.current.size === 2 && gesture.current) {
       const [a, b] = [...pointers.current.values()];
@@ -126,6 +118,7 @@ export function CardEditor({ state, dispatch, paper, page, zoom, preview, locked
         from: { x: el.x, y: el.y, scale: el.scale, rotation: el.rotation },
         recorded: false,
       };
+      lift(el.uid);
       return;
     }
     if (pointers.current.size > 1) return;
@@ -142,7 +135,17 @@ export function CardEditor({ state, dispatch, paper, page, zoom, preview, locked
     if (pick?.uid) {
       const el = byUid(pick.uid);
       dispatch({ type: "select", uid: pick.uid });
-      if (el) gesture.current = { kind: "drag", uid: el.uid, face: el.face, start: pick, from: { x: el.x, y: el.y }, recorded: false };
+      if (el) {
+        gesture.current = {
+          kind: "drag",
+          uid: el.uid,
+          face: el.face,
+          grab: { x: el.x - pick.x, y: el.y - pick.y },
+          scale: el.scale,
+          recorded: false,
+        };
+        lift(el.uid);
+      }
     } else {
       dispatch({ type: "select", uid: null });
       if (pick) dispatch({ type: "focus-face", face: pick.face });
@@ -157,8 +160,17 @@ export function CardEditor({ state, dispatch, paper, page, zoom, preview, locked
     if (!g) return;
     if (g.kind === "drag") {
       const at = card.current?.pick(e.clientX, e.clientY);
-      if (!at || at.face !== g.face) return;
-      move(g.uid, { x: g.from.x + at.x - g.start.x, y: g.from.y + at.y - g.start.y }, !g.recorded);
+      const el = byUid(g.uid);
+      if (!at || !el) return;
+      const across = at.face !== g.face;
+      if (across) {
+        // Over the other page: carry it there at the same size on the paper.
+        g.grab = shiftAcross(g.grab, g.face, at.face);
+        g.scale = scaleAcross(g.scale, g.face, at.face);
+        g.face = at.face;
+      }
+      const pos = { x: at.x + g.grab.x, y: at.y + g.grab.y };
+      move(g.uid, { ...pos, ...(g.face === el.face ? {} : { face: g.face, scale: g.scale }) }, !g.recorded);
       g.recorded = true;
       return;
     }
@@ -167,17 +179,17 @@ export function CardEditor({ state, dispatch, paper, page, zoom, preview, locked
     const t = pinchTransform(g.start, { a, b });
     const mid = card.current?.pick((a.x + b.x) / 2, (a.y + b.y) / 2);
     const shift = mid && g.startMid && mid.face === g.face ? { x: mid.x - g.startMid.x, y: mid.y - g.startMid.y } : { x: 0, y: 0 };
-    move(
-      g.uid,
-      { scale: g.from.scale * t.scale, rotation: g.from.rotation + t.rotation, x: g.from.x + shift.x, y: g.from.y + shift.y },
-      !g.recorded,
-    );
+    move(g.uid, { scale: g.from.scale * t.scale, rotation: g.from.rotation + t.rotation, x: g.from.x + shift.x, y: g.from.y + shift.y }, !g.recorded);
     g.recorded = true;
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
     pointers.current.delete(e.pointerId);
-    if (pointers.current.size === 0 || gesture.current?.kind === "pinch") gesture.current = null;
+    const g = gesture.current;
+    if (pointers.current.size === 0 || g?.kind === "pinch") {
+      if (g) release(g.uid, g.recorded);
+      gesture.current = null;
+    }
   };
 
   return (
@@ -218,8 +230,7 @@ export function CardEditor({ state, dispatch, paper, page, zoom, preview, locked
         interactive={locked && page === "cover" && !preview}
         handleRef={card}
       />
-      {/* Writing on the card: nothing framed, just the page and the caret. */}
-      {editing && !editingSlot && <FocusOutline card={card} face={state.focusFace} />}
+      {/* Writing on the card: just the page and the caret. */}
       {editing &&
         onEditSlot &&
         TEXT_SLOTS.map((slot) => (
@@ -240,6 +251,11 @@ export function CardEditor({ state, dispatch, paper, page, zoom, preview, locked
           uid={selected.uid}
           current={{ scale: selected.scale, rotation: selected.rotation }}
           onTransform={(patch, record) => move(selected.uid, patch, record)}
+          onGrab={() => {
+            stopGlide();
+            lift(selected.uid);
+          }}
+          onRelease={(moved) => release(selected.uid, moved)}
           onDelete={() => dispatch({ type: "remove", uid: selected.uid })}
         />
       )}

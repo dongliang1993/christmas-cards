@@ -5,6 +5,7 @@ import type { CardElement, Face } from "@/lib/letter/model";
 import { MATERIAL_PRESETS } from "@/lib/reliefCore";
 import { loadStickerManifest, loadStickerSurface } from "@/lib/stickers/stickerSurface";
 import { FACE_FRAMES, quadCorners } from "./elementLayout";
+import type { ElementShape } from "./elementBounds";
 import { slotPlacement, SLOTS } from "./slots";
 import { INK_COLORS, renderSlotImage, renderTextImage, TEXT_LINE_FRACTION } from "./textCanvas";
 
@@ -43,6 +44,8 @@ interface Entry {
   buffers: BendBuffers | null;
   aspect: number;
   widthFraction: number;
+  /** aspect and widthFraction are measured, not defaults (kept through a reload). */
+  shaped: boolean;
   element: LayerElement;
   version: number;
 }
@@ -52,6 +55,13 @@ export interface ElementLayer {
   applyBend(bends: Record<Face, number>): void;
   /** Meshes currently on the card, each with `userData.uid`. */
   meshes(): THREE.Mesh[];
+  /** Size at scale 1 of a loaded element, or null until it has loaded. */
+  shapeOf(uid: string): ElementShape | null;
+  /**
+   * While a gesture holds it, draw this element over the paper so the other
+   * page cannot hide it at the fold. Its order among stickers and text keeps.
+   */
+  lift(uid: string | null): void;
   dispose(): void;
 }
 
@@ -182,6 +192,13 @@ export function createElementLayer(
   const entries = new Map<string, Entry>();
   const bends: Record<Face, number> = { "inside-left": 0, "inside-right": 0 };
   let disposed = false;
+  let lifted: string | null = null;
+  const applyLift = (entry: Entry) => {
+    if (!entry.mesh) return;
+    for (const m of Array.isArray(entry.mesh.material) ? entry.mesh.material : [entry.mesh.material]) {
+      m.depthTest = entry.key !== lifted;
+    }
+  };
 
   const place = (entry: Entry) => {
     if (!entry.mesh) return;
@@ -215,6 +232,7 @@ export function createElementLayer(
       if (!built) return;
       entry.aspect = built.aspect;
       entry.widthFraction = built.widthFraction;
+      entry.shaped = true;
       entry.mesh = new THREE.Mesh(new THREE.BufferGeometry(), built.material);
       entry.mesh.userData.uid = entry.key;
       entry.mesh.renderOrder = 2 + entry.element.z;
@@ -229,6 +247,7 @@ export function createElementLayer(
         };
       }
       place(entry);
+      applyLift(entry);
     } catch (error) {
       console.error("[card] element failed to load", error);
     }
@@ -252,6 +271,7 @@ export function createElementLayer(
             buffers: null,
             aspect: 1,
             widthFraction: STICKER_WIDTH_FRACTION,
+            shaped: false,
             element,
             version: 0,
           };
@@ -287,6 +307,16 @@ export function createElementLayer(
 
     meshes() {
       return [...entries.values()].flatMap((e) => (e.mesh ? [e.mesh] : []));
+    },
+
+    lift(uid) {
+      lifted = uid;
+      for (const entry of entries.values()) applyLift(entry);
+    },
+
+    shapeOf(uid) {
+      const entry = entries.get(uid);
+      return entry?.shaped ? { widthFraction: entry.widthFraction, aspect: entry.aspect } : null;
     },
 
     dispose() {
