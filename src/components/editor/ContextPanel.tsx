@@ -14,7 +14,7 @@ import { MusicUpload } from "./MusicUpload";
 
 export type Tool = "style" | "stickers" | "text" | "paper" | "music";
 
-export const TOOL_LABELS: Record<Tool, string> = { style: "款式", stickers: "贴纸", text: "文字", paper: "纸张", music: "音乐" };
+export const TOOL_LABELS: Record<Tool, string> = { style: "封面", stickers: "贴纸", text: "文字", paper: "纸张", music: "音乐" };
 
 interface Props {
   tool: Tool;
@@ -135,7 +135,7 @@ export function ContextPanel({ tool, state, dispatch, editingSlot, onAddSticker,
   switch (tool) {
     case "style":
       return (
-        <Section title="款式" hint="换封面插画，你写的内容和贴纸会保留">
+        <Section title="封面" hint="换封面插画，你写的内容和贴纸会保留">
           <ul className="grid grid-cols-2 gap-2 px-3 pb-4">
             {CARD_TEMPLATES.map((t) => {
               const active = state.draft.templateId === t.id;
@@ -146,10 +146,25 @@ export function ContextPanel({ tool, state, dispatch, editingSlot, onAddSticker,
                     aria-pressed={active}
                     aria-label={t.name || t.id}
                     onClick={() => onTemplate(t.id)}
-                    className={`block w-full rounded-xl p-1.5 transition ${active ? "bg-stone-900" : "hover:bg-stone-100"}`}
+                    className="group relative block w-full p-1.5"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={CARD_ASSETS[t.id].coverSrc} alt="" className="aspect-[5/7] w-full rounded-lg object-cover" />
+                    <img
+                      src={CARD_ASSETS[t.id].coverSrc}
+                      alt=""
+                      className={`aspect-[5/7] w-full rounded-lg object-cover transition ${
+                        active
+                          ? "ring-2 ring-stone-800 ring-offset-2 ring-offset-white"
+                          : "ring-1 ring-stone-200 group-hover:-translate-y-0.5 group-hover:shadow-md"
+                      }`}
+                    />
+                    {active && (
+                      <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-stone-800 text-white shadow">
+                        <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M3.5 8.5l3 3 6-7" />
+                        </svg>
+                      </span>
+                    )}
                   </button>
                 </li>
               );
