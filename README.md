@@ -8,6 +8,19 @@
   3D 互动圣诞贺卡:挑一张纸雕卡片,写下祝福,贴贴纸、传一首歌,封上火漆印,生成链接寄给重要的人。
 </p>
 
+<p align="center">
+  <a href="https://3dcards.theliang.com/"><img src="https://img.shields.io/badge/live-3dcards.theliang.com-111111" alt="Live" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-PolyForm_Noncommercial_1.0.0-4c4c4c" alt="License" /></a>
+</p>
+
+> **源码许可 / Source terms:** 源码仅授权非商业学习、修改与分发;禁止商业使用、商业产品集成、广告和品牌项目。Source is available for noncommercial use only and is not OSI-approved open-source software. See [LICENSE](LICENSE).
+
+## 在线体验 / Live
+
+- 在线写一张贺卡:<https://3dcards.theliang.com/>
+- 建议桌面浏览器(Chrome / Edge / Firefox)打开,需要 WebGL2 与硬件加速
+- 移动端可用,但 3D 编辑器在小屏上以底部工具栏布局呈现
+
 ## 功能
 
 - **3D 纸雕卡片** —— 多层纸雕封面、翻盖弯曲、纸张浮雕与光影,全部实时渲染(Three.js)
