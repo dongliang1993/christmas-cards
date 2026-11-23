@@ -9,6 +9,12 @@
 </p>
 
 <p align="center">
+  <a href="https://3dcards.theliang.com/">
+    <img src="public/social-preview.jpg" alt="christmas-cards: 3D paper-cut Christmas cards fanned out on a table" width="720" />
+  </a>
+</p>
+
+<p align="center">
   <a href="https://3dcards.theliang.com/"><img src="https://img.shields.io/badge/live-3dcards.theliang.com-111111" alt="Live" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-PolyForm_Noncommercial_1.0.0-4c4c4c" alt="License" /></a>
 </p>
