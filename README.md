@@ -1,0 +1,73 @@
+<p align="center">
+  <img src="public/assets/brand/mark.webp" alt="christmas-cards" width="120" />
+</p>
+
+<h1 align="center">christmas-cards</h1>
+
+<p align="center">
+  3D 互动圣诞贺卡:挑一张纸雕卡片,写下祝福,贴贴纸、传一首歌,封上火漆印,生成链接寄给重要的人。
+</p>
+
+## 功能
+
+- **3D 纸雕卡片** —— 多层纸雕封面、翻盖弯曲、纸张浮雕与光影,全部实时渲染(Three.js)
+- **卡片编辑器** —— 三段文字槽位、贴纸跨折页拖拽、撤销/重做、草稿自动保存
+- **火漆信封** —— 长按盖印、拆信动画,把寄信这件事做出仪式感
+- **音乐** —— 上传一首歌,收信人拆开信封时自动播放
+- **定时送达** —— 选定送达日期,到期前信件内容对收信人保密
+- **链接寄送** —— 一封信一个链接;发件箱(outbox)入口只有发件人持有
+- **隐私友好的统计(可选)** —— Umami 经自家域名同源中转,不配置则完全不加载
+
+## 技术栈
+
+- Next.js 15(App Router)+ React 19 + TypeScript
+- Three.js:自研纸张浮雕烘焙、弯曲与光影管线
+- Tailwind CSS 4 + Radix UI / shadcn 组件
+- Cloudflare Workers(OpenNext)+ D1(信件)+ R2(音频与页面缓存)
+- Vitest 单元测试
+
+## 本地开发
+
+```bash
+pnpm install
+pnpm dev          # http://localhost:3000
+```
+
+本地开发时,信件存在 `data/letters.db`(SQLite),上传的音频存在 `data/uploads/`。
+
+```bash
+pnpm test         # vitest
+```
+
+## 部署
+
+部署到 Cloudflare(Workers + D1 + R2),完整步骤见 [docs/deploy.md](docs/deploy.md)。简版:
+
+```bash
+cp wrangler.jsonc.example wrangler.jsonc   # 填入你的 D1 database_id 和域名
+pnpm db:migrate:remote
+pnpm cf:deploy
+```
+
+`wrangler.jsonc` 已在 `.gitignore` 中,你的个人配置不会入库。
+
+## 配置
+
+复制 `.env.example` 为 `.env.local`,以下均为可选:
+
+| 变量 | 说明 |
+| --- | --- |
+| `NEXT_PUBLIC_UMAMI_WEBSITE_ID` | Umami 站点 ID。留空则不注入任何统计脚本 |
+| `NEXT_PUBLIC_TRACKED_DOMAIN` | 只统计该域名的访问(本地与预览环境不计入) |
+
+## 素材说明
+
+- **卡片插画与贴纸**:AI 图像模型生成,经 `scripts/` 切分与浮雕烘焙后入库;原始大图(`assets-src/`)未入库。随项目以相同的非商业条款分享,不得单独商用
+- **音效**:`scripts/sfx/paper_card.py` 程序化合成(与翻盖铰链的物理弹簧同步)
+- **字体**:Inter、Caveat、Long Cang(Google Fonts,SIL OFL,构建时经 `next/font` 自托管)
+
+## License
+
+[PolyForm Noncommercial License 1.0.0](LICENSE) —— 可自由用于学习、研究、修改与**非商业**再分发;**不允许商业用途**。所有副本与衍生作品必须保留 LICENSE 中的 `Required Notice`。
+
+本站名称、品牌标识与卡片美术不授权用作其他产品的品牌标识。

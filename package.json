@@ -2,6 +2,14 @@
   "name": "christmas-cards",
   "version": "0.1.0",
   "private": true,
+  "description": "3D interactive Christmas cards: pick a paper-cut card, write a wish, seal it with wax, and send it as a link. Next.js + Three.js on Cloudflare.",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "author": "dongliang",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dongliang1993/christmas-cards.git"
+  },
+  "keywords": ["christmas", "card", "3d", "three.js", "next.js", "cloudflare-workers"],
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
