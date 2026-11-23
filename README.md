@@ -2,7 +2,7 @@
   <img src="public/assets/brand/mark.webp" alt="christmas-cards" width="120" />
 </p>
 
-<h1 align="center">christmas-cards</h1>
+<h1 align="center">Christmas Cards</h1>
 
 <p align="center">
   3D 互动圣诞贺卡:挑一张纸雕卡片,写下祝福,贴贴纸、传一首歌,封上火漆印,生成链接寄给重要的人。
@@ -23,7 +23,7 @@
 
 ## 在线体验 / Live
 
-- 在线写一张贺卡:<https://3dcards.theliang.com/>
+- 在线写一张贺卡:<https://3dcards.theliang.com>
 - 建议桌面浏览器(Chrome / Edge / Firefox)打开,需要 WebGL2 与硬件加速
 - 移动端可用,但 3D 编辑器在小屏上以底部工具栏布局呈现
 
@@ -68,16 +68,14 @@ pnpm db:migrate:remote
 pnpm cf:deploy
 ```
 
-`wrangler.jsonc` 已在 `.gitignore` 中,你的个人配置不会入库。
-
 ## 配置
 
 复制 `.env.example` 为 `.env.local`,以下均为可选:
 
-| 变量 | 说明 |
-| --- | --- |
-| `NEXT_PUBLIC_UMAMI_WEBSITE_ID` | Umami 站点 ID。留空则不注入任何统计脚本 |
-| `NEXT_PUBLIC_TRACKED_DOMAIN` | 只统计该域名的访问(本地与预览环境不计入) |
+| 变量                           | 说明                                     |
+| ------------------------------ | ---------------------------------------- |
+| `NEXT_PUBLIC_UMAMI_WEBSITE_ID` | Umami 站点 ID。留空则不注入任何统计脚本  |
+| `NEXT_PUBLIC_TRACKED_DOMAIN`   | 只统计该域名的访问(本地与预览环境不计入) |
 
 ## 素材说明
 
