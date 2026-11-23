@@ -70,14 +70,17 @@ export default function RootLayout({
         </div>
         {children}
         {/* Umami analytics through our own domain (lib/analytics/umamiProxy.ts);
-            data-domains keeps local dev and previews out of the numbers. */}
-        <Script
-          src={`${STATS_PATH}/script.js`}
-          data-website-id={UMAMI_WEBSITE_ID}
-          data-host-url={STATS_PATH}
-          data-domains={TRACKED_DOMAIN}
-          strategy="afterInteractive"
-        />
+            injected only when a website id is configured. data-domains keeps
+            local dev and previews out of the numbers. */}
+        {UMAMI_WEBSITE_ID ? (
+          <Script
+            src={`${STATS_PATH}/script.js`}
+            data-website-id={UMAMI_WEBSITE_ID}
+            data-host-url={STATS_PATH}
+            data-domains={TRACKED_DOMAIN || undefined}
+            strategy="afterInteractive"
+          />
+        ) : null}
         <EngagementTracker />
       </body>
     </html>

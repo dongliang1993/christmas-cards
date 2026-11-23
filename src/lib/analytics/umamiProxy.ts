@@ -9,18 +9,21 @@
  * so the proxy must hand both on. Umami Cloud reads the real visitor IP from
  * `x-umami-client-ip` (its header for exactly this case); without it every
  * visitor would look like our Worker.
+ *
+ * Analytics are optional: with no NEXT_PUBLIC_UMAMI_WEBSITE_ID the tracker is
+ * never injected (src/app/layout.tsx) and the /stats routes go unused.
  */
 
 export const UMAMI_ORIGIN = "https://cloud.umami.is";
 
-/** Public id of the 3dcards.theliang.com site in Umami (not a secret). */
-export const UMAMI_WEBSITE_ID = "67de088d-bb66-4179-9297-7ec12c083b2a";
+/** Your Umami website id (public: it ships in the page). Empty disables tracking. */
+export const UMAMI_WEBSITE_ID = process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID ?? "";
 
 /** Where the tracker lives on our domain; it posts to `${STATS_PATH}/api/send`. */
 export const STATS_PATH = "/stats";
 
-/** Only the production domain is counted: local dev and previews stay out. */
-export const TRACKED_DOMAIN = "3dcards.theliang.com";
+/** Only this domain is counted: local dev and previews stay out. */
+export const TRACKED_DOMAIN = process.env.NEXT_PUBLIC_TRACKED_DOMAIN ?? "";
 
 /** A beacon is a few hundred bytes; anything far larger is not one. */
 export const MAX_BEACON_BYTES = 16 * 1024;
