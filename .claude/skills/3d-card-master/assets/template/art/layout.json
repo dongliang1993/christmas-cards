@@ -1,0 +1,141 @@
+{
+  "base": "./art/cover-base.webp",
+  "cover": "./art/cover.webp",
+  "size": [
+    940,
+    1316
+  ],
+  "items": [
+    {
+      "id": "cloud-left",
+      "src": "./art/elements/cloud-1.webp",
+      "box": [
+        62,
+        280,
+        232
+      ],
+      "lift": 0.01
+    },
+    {
+      "id": "cloud-right",
+      "src": "./art/elements/cloud-2.webp",
+      "box": [
+        648,
+        425,
+        226
+      ],
+      "lift": 0.01
+    },
+    {
+      "id": "star-right",
+      "src": "./art/elements/star-2.webp",
+      "box": [
+        775,
+        300,
+        92
+      ],
+      "lift": 0.012
+    },
+    {
+      "id": "star-left",
+      "src": "./art/elements/star-1.webp",
+      "box": [
+        92,
+        588,
+        66
+      ],
+      "lift": 0.012
+    },
+    {
+      "id": "ornament",
+      "src": "./art/elements/snowflake-3.webp",
+      "box": [
+        400,
+        1010,
+        140
+      ],
+      "lift": 0.012
+    },
+    {
+      "id": "ornament-star-l",
+      "src": "./art/elements/star-1.webp",
+      "box": [
+        318,
+        1062,
+        48
+      ],
+      "lift": 0.01
+    },
+    {
+      "id": "ornament-star-r",
+      "src": "./art/elements/star-1.webp",
+      "box": [
+        574,
+        1062,
+        48
+      ],
+      "lift": 0.01
+    },
+    {
+      "id": "moon",
+      "src": "./art/elements/moon.webp",
+      "box": [
+        70,
+        105,
+        210
+      ],
+      "lift": 0.016
+    },
+    {
+      "id": "bow-bell",
+      "src": "./art/elements/bow-bell.webp",
+      "box": [
+        640,
+        75,
+        210
+      ],
+      "lift": 0.018,
+      "bob": 0.0015
+    },
+    {
+      "id": "gift",
+      "src": "./art/elements/gift.webp",
+      "box": [
+        606,
+        668,
+        196
+      ],
+      "lift": 0.02
+    },
+    {
+      "id": "holly",
+      "src": "./art/elements/holly.webp",
+      "box": [
+        88,
+        700,
+        272
+      ],
+      "lift": 0.024
+    },
+    {
+      "id": "ribbon",
+      "src": "./art/elements/ribbon.webp",
+      "box": [
+        168,
+        808,
+        604
+      ],
+      "lift": 0.028
+    }
+  ],
+  "motifs": [
+    {
+      "src": "./art/elements/snowflake-3.webp",
+      "px": 560
+    },
+    {
+      "src": "./art/elements/star-2.webp",
+      "px": 320
+    }
+  ]
+}

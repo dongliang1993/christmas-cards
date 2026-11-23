@@ -45,6 +45,10 @@
 - Cloudflare Workers(OpenNext)+ D1(信件)+ R2(音频与页面缓存)
 - Vitest 单元测试
 
+## 本地 AI 制作 Skill（3d-card-master）
+
+仓库内置了独立的 Claude Code / Codex Skill：[`3d-card-master`](.claude/skills/3d-card-master/README.md)，支持在本地离线生成同等质感的 3D 纸雕互动贺卡（含冷压棉纸浮雕与烫金烘焙脚本、透明抠图脚本与零 CDN 离线模板）。完整安装方法、截图与使用示例见 [`.claude/skills/3d-card-master/README.md`](.claude/skills/3d-card-master/README.md)。
+
 ## 本地开发
 
 ```bash
