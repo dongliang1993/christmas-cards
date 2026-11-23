@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { LETTERS_SCHEMA_SQL } from "@/lib/letter/repository";
-import { createFsUploadStore, isUploadKey, MAX_UPLOAD_BYTES, validateUpload } from "./uploadStore";
+import { createFsUploadStore, createR2UploadStore, isUploadKey, type R2Like, MAX_UPLOAD_BYTES, validateUpload } from "./uploadStore";
 
 describe("validateUpload", () => {
   it("accepts an mp3 and gives it a random key keeping the extension", () => {
@@ -27,6 +27,13 @@ describe("validateUpload", () => {
     const r = validateUpload({ name: "voice.m4a", type: "", size: 10 });
     expect(r.ok && r.contentType).toBe("audio/mp4");
   });
+
+  it("types an m4a by its extension whatever the browser calls it", () => {
+    for (const type of ["audio/x-m4a", "audio/m4a", "audio/mp4a-latm"]) {
+      const r = validateUpload({ name: "converted.m4a", type, size: 10 });
+      expect(r.ok && r.contentType).toBe("audio/mp4");
+    }
+  });
 });
 
 describe("isUploadKey", () => {
@@ -45,6 +52,40 @@ describe("filesystem upload store", () => {
     expect(got?.contentType).toBe("audio/mpeg");
     expect(new TextDecoder().decode(got?.body)).toBe("hi");
     expect(await store.get("missingmissingmi.mp3")).toBeNull();
+  });
+
+  it("returns just a span of a file, and its full size", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "uploads-"));
+    const store = createFsUploadStore(dir);
+    await store.put("abcdefghijklmnop.mp3", new TextEncoder().encode("0123456789").buffer as ArrayBuffer, "audio/mpeg");
+    expect(await store.head("abcdefghijklmnop.mp3")).toEqual({ size: 10 });
+    expect(await store.head("missingmissingmi.mp3")).toBeNull();
+    const got = await store.get("abcdefghijklmnop.mp3", { offset: 3, length: 4 });
+    expect(new TextDecoder().decode(got?.body)).toBe("3456");
+    expect(got?.size).toBe(10);
+  });
+});
+
+describe("R2 upload store", () => {
+  it("asks R2 for only the requested span", async () => {
+    const calls: unknown[] = [];
+    const bucket: R2Like = {
+      async put() {
+        return null;
+      },
+      async head() {
+        return { size: 10 };
+      },
+      async get(_key, options) {
+        calls.push(options);
+        return { size: 10, httpMetadata: { contentType: "audio/mp4" }, arrayBuffer: async () => new ArrayBuffer(4) };
+      },
+    };
+    const store = createR2UploadStore(bucket);
+    const got = await store.get("abcdefghijklmnop.m4a", { offset: 3, length: 4 });
+    expect(calls).toEqual([{ range: { offset: 3, length: 4 } }]);
+    expect(got?.size).toBe(10);
+    expect(await store.head("abcdefghijklmnop.m4a")).toEqual({ size: 10 });
   });
 });
 
