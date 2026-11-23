@@ -38,8 +38,15 @@ export type UploadCheck =
 /**
  * Audio only, within the size cap. The stored key is random: the sender's
  * file name never reaches storage or URLs.
+ *
+ * `sniffed` is the format read from the file's own bytes (see
+ * audioFormat.ts). When known it decides the stored extension and type, so a
+ * renamed mp3 is kept as an mp3; the name's extension still has to be audio.
  */
-export function validateUpload(file: { name: string; type: string; size: number }): UploadCheck {
+export function validateUpload(
+  file: { name: string; type: string; size: number },
+  sniffed: string | null = null,
+): UploadCheck {
   if (file.size === 0) return { ok: false, error: "文件是空的" };
   if (file.size > MAX_UPLOAD_BYTES) return { ok: false, error: "音频不能超过 15 MB" };
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
@@ -48,7 +55,8 @@ export function validateUpload(file: { name: string; type: string; size: number 
   if (file.type && !file.type.startsWith("audio/") && file.type !== "application/octet-stream") {
     return { ok: false, error: "只能上传音频文件" };
   }
-  return { ok: true, key: `${nanoid(16)}.${ext}`, contentType: byExt };
+  const stored = sniffed && TYPES[sniffed] ? sniffed : ext;
+  return { ok: true, key: `${nanoid(16)}.${stored}`, contentType: TYPES[stored] };
 }
 
 export interface StoredUpload {

@@ -1,3 +1,4 @@
+import { SNIFF_BYTES, sniffAudioExtension } from "@/lib/server/audioFormat";
 import { fail, ok, toErrorResponse } from "@/lib/server/http";
 import { getUploadStore, MAX_UPLOAD_BYTES, validateUpload } from "@/lib/server/uploadStore";
 
@@ -9,10 +10,11 @@ export async function POST(request: Request): Promise<Response> {
     const form = await request.formData();
     const file = form.get("file");
     if (!(file instanceof File)) return fail("请选择一个音频文件", 400);
-    const check = validateUpload(file);
+    const data = await file.arrayBuffer();
+    const check = validateUpload(file, sniffAudioExtension(new Uint8Array(data, 0, Math.min(SNIFF_BYTES, data.byteLength))));
     if (!check.ok) return fail(check.error, 400);
     const store = await getUploadStore();
-    await store.put(check.key, await file.arrayBuffer(), check.contentType);
+    await store.put(check.key, data, check.contentType);
     return ok({ url: `/api/audio/${check.key}`, filename: file.name });
   } catch (error) {
     return toErrorResponse(error, "POST /api/upload");

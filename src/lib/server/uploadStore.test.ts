@@ -36,6 +36,23 @@ describe("validateUpload", () => {
   });
 });
 
+describe("validateUpload with the sniffed format", () => {
+  it("stores a renamed mp3 as an mp3", () => {
+    const r = validateUpload({ name: "renamed.m4a", type: "audio/x-m4a", size: 10 }, "mp3");
+    expect(r.ok && r.key).toMatch(/\.mp3$/);
+    expect(r.ok && r.contentType).toBe("audio/mpeg");
+  });
+
+  it("keeps the extension when the content could not be recognised", () => {
+    const r = validateUpload({ name: "song.m4a", type: "", size: 10 }, null);
+    expect(r.ok && r.key).toMatch(/\.m4a$/);
+  });
+
+  it("still rejects a non-audio extension even if the bytes look like audio", () => {
+    expect(validateUpload({ name: "x.png", type: "image/png", size: 10 }, "mp3").ok).toBe(false);
+  });
+});
+
 describe("isUploadKey", () => {
   it("refuses path tricks", () => {
     expect(isUploadKey("../../etc/passwd")).toBe(false);
