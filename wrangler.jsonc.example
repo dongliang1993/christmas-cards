@@ -5,13 +5,16 @@
   "compatibility_date": "2026-11-18",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
-  // Served on its own subdomain; Cloudflare creates the DNS record and certificate.
-  "routes": [{ "pattern": "3dcards.theliang.com", "custom_domain": true }],
+  // Your own domain. *.workers.dev is unreachable from some networks, and
+  // letter links take the host of the page the sender opened. The zone must
+  // live in the same Cloudflare account; deploy creates DNS and certificate.
+  "routes": [{ "pattern": "cards.example.com", "custom_domain": true }],
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "christmas-letters",
-      "database_id": "1e9a5c2d-9ebf-4c2a-8538-294bdf4139d5",
+      // From `pnpm exec wrangler d1 create christmas-letters` (docs/deploy.md).
+      "database_id": "replace-with-your-d1-database-id",
       "migrations_dir": "migrations"
     }
   ],

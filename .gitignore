@@ -29,6 +29,14 @@ __pycache__/
 # Ryugi scratch (workspaces are recreated per spec)
 .ryugi/
 
+# Env files (template lives in .env.example)
+.env*
+!.env.example
+
+# Personal deploy config: copy wrangler.jsonc.example and fill in your own
+# database_id and domain (docs/deploy.md). Kept out of git.
+wrangler.jsonc
+
 # Cloudflare build output
 .open-next/
 .wrangler/
