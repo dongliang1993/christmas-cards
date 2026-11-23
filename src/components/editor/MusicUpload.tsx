@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Music, Pause, Play, X } from "lucide-react";
+import { AUDIO_UPLOAD_ACCEPT } from "@/lib/audioUploadAccept";
 
 interface MusicUploadProps {
   audioName: string | null;
@@ -58,7 +59,7 @@ export function MusicUpload({ audioName, audioUrl, onChange }: MusicUploadProps)
       {uploading ? "上传中…" : label}
       <input
         type="file"
-        accept="audio/*"
+        accept={AUDIO_UPLOAD_ACCEPT}
         className="hidden"
         disabled={uploading}
         onChange={(e) => {
